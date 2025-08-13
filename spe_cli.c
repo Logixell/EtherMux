@@ -206,8 +206,8 @@ int process_command(int argc, char *argv[MAX_ARGUMENTS]) {
         printf(" write (or w)[address] [data]   - Write FPGA register\n");
         printf(" read  (or r) smi(1 or 2) [address]       - Read SMIx register \n");
         printf(" write (or w) smi(1 or 2) [address] [data] - Write SMIx register\n");
-        printf(" rot                   - Print rotation sensor\n");
-        printf(" reset [device]      - Reset PHY [device=1 or 2]\n");
+        printf(" rot                  - Print rotation sensor\n");
+        printf(" reset phy [device]   - Reset PHY [device=1 or 2]\n");
         printf(" phyx [tdr]           - Time Domain Reflectometry test\n");
         printf(" phyx [sqi]           - Signal Quality Indicator test\n");
         printf(" phyx [gen]           - Packet Generator\n");
@@ -305,19 +305,25 @@ int phy_sqi(int device) {
 int reset_phy(int device){
     int error;
     int data = 0x00;
-    int address = 0x00; // PHY control register address
+
+    error = write_smi_ext(device, 0x1F, 0x8000); // Hardware reset PHY
+//busy_wait_ms(1000); // wait for 1ms
 
     error = read_register8(FPGA_CTRL, &data); 
     if(device == 1 ){
         data = data & 0xFE; // clear reset bit
         error = write_register8(FPGA_CTRL, data); 
-        data = data | 0x03; // set wake and reset bit
+        data = data | 0x03; // set wake and reset bit (creates 37uS resetb pulse)
         error = write_register8(FPGA_CTRL, data); 
+        error = write_smi_ext(device, 0x1834, 0xC000); // Bit 14:1b = Configure PHY1 as MASTER
+
     } else if (device == 2 ){
         data = data & 0xEF; // clear reset bit
         error = write_register8(FPGA_CTRL, data); 
         data = data | 0x30; // set wake and reset bit
         error = write_register8(FPGA_CTRL, data); 
+        error = write_smi_ext(device, 0x1834, 0x8000); // Bit 14:0b = Configure PHY2 as Slave ie: turn off link
+
     }
     busy_wait_ms(1000); // wait for 1ms
     // Setup PHY in RMII Master mode 011
@@ -325,16 +331,17 @@ int reset_phy(int device){
     //error = write_smi_ext(device,  0x001F, 0x8000); //Hardware reset
     //busy_wait_ms(1000); // wait for 1ms
     // read regiter 0x45D to check strap configuration
-    //error = write_smi_ext(device, 0x1834, 0xC000); // Bit 14:1b = Configure PHY as MASTER
+    // read register 0x1 bit 2 for link status
     //error = write_smi_ext(device, 0x0648, 0x0160); // Bug no effect observed RMII Contol 1 Register 
     //error = write_smi_ext(device, 0x064A, 0x0400); // Bug no effect observed RMII Override Contol 1 Register 
-    //error = write_smi_ext(device, 0x18B, 0x1C4B); // Bug no effect observed Autonomous mode
+    error = write_smi_ext(device, 0x18B, 0x1C4B); // Bug no effect observed Bit 6: Autonomous mode
     //error = write_smi_ext(device, 0x453, 0x0081); // Bug no effect observed Clockout mux
+//    error = write_smi_ext(device, 0x1F, 0x4000); // Software restart PHY
 
 //Register setup from linux driver static const struct DP83TC812_init_reg DP83TC812_master_cs2_0_init[] = {
 /*
 error = write_smi_ext(device,  0x001F, 0x8000); //Hardware reset
-error = write_smi_ext(device,  0x0523, 0x0001); //unlisted register
+error = write_smi_ext(device,  0x0523, 0x0001); //unlisted register Transmit disable
 error = write_smi_ext(device,  0x1834, 0xC001);
 error = write_smi_ext(device,  0x081C, 0x0FE2); //unlisted register
 error = write_smi_ext(device,  0x0872, 0x0300); //unlisted register
@@ -378,7 +385,7 @@ int read_smi_ext(int device, int address, int *data){
         error = write_smi(device, REGCR, 0x4001);
         error = read_smi(device, ADDAR, &result);
         *data = result;
-    }else if(address < 0x3002){ //MMD1 0x3000-0x3001 - Read Address Operation
+    }else if(address < 0x3002){ //MMD3 0x3000-0x3001 - Read Address Operation
         address = address & 0xFFF; // convert to MMD1 address
         error = write_smi(device, REGCR, 0x3);
         error = write_smi(device, ADDAR, address);
