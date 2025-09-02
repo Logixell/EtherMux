@@ -4,10 +4,12 @@
     #define MAX_COMMAND_LENGTH 50
     #define MAX_ARGUMENTS 6
     // select only one of the following loopback options
-    #define LOOPBACK_MODE PCS  //Valid Arguments: PCS or AFE or RMII
+    #define LOOPBACK_MODE NONE  //Valid Arguments: PCS or AFE or RMII or DIGITAL
     #define AFE 1
     #define PCS 2
     #define RMII 3
+    #define DIGITAL 4
+    #define NONE 5  //you must use None if you want the packet generator to send out to MDI
 
     // SMI registers
     #define REGCR 0x0D
@@ -28,6 +30,6 @@
     int get_command(char *input,int *pIndex);
     int print_rotation_sensor();
     int enable_data_generator_checker(int device);
-
+    int send_packet();
 
 #endif 

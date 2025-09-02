@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 #ifndef SPE_MAIN_H
 #define SPE_MAIN_H
 
@@ -13,6 +15,7 @@ int read_register16(int address, int *data );
 int write_register8(int address, int data);
 int spi_read_register8(int address, int *data);  
 int spi_write_register8(int address, int data);
+int spi_write_array(uint8_t *data, size_t length);
 int spi_read_register16(int address, int *data);
 
 // FPGA Interface Command Defines

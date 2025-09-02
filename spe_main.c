@@ -125,6 +125,19 @@ int spi_write_register8(int address, int data) {
     return 0; // No error checking performed
 }
 
+int spi_write_array(uint8_t *data, size_t length) {
+
+    // Select the SPI device by setting CS low
+    gpio_put(PIN_CS, 0);
+
+    // Write the address and data to the SPI device
+    spi_write_blocking(SPI_PORT, data, length);
+
+    // Deselect the SPI device by setting CS high
+    gpio_put(PIN_CS, 1);
+
+    return 0; // No error checking performed
+}
 
 
 

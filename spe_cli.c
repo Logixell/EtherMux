@@ -197,6 +197,14 @@ int process_command(int argc, char *argv[MAX_ARGUMENTS]) {
             }else{
                 printf("Error: No Response\n");
             }
+        } else if (strcmp(argv[1], "send") == 0){
+            error= send_packet(device);
+            if(!error){
+                printf("TX packets enabled\n");
+            }else{
+                printf("Error: No Response\n");
+            }
+
 
         }else printf("Error: tdr or sqi\n");
 
@@ -607,22 +615,22 @@ int enable_data_generator_checker(int device) {
 
     // Setup Data Generator/ checker modes
     //8.6.2.73 PRBS_CTRL_2 Register (Address = 61Ah) [Reset = 05DCh]
-    error = write_smi_ext(device, 0x061A, 0x0020); // Frame length: 32 bytes
+    error = write_smi_ext(device, 0x061A, 0x0020); // Frame length: 0x0020=32 bytes
     if(error) return 1;
 
     //8.6.2.74 PRBS_CTRL_3 Register (Address = 61Bh) [Reset = 007Dh] 125 bytes
-    error = write_smi_ext(device, 0x061B, 0x007D); // Inter packet gap: 125 bytes 
+    error = write_smi_ext(device, 0x061B, 0x0008); // Inter packet gap: 0x007D=125 bytes by default.  Testing revealed that 2 bytes will cause packet loss (phy rxdv goes high but data remains at 00 during the packet) 3 and above were ok.
 
     //8.6.2.81 PRBS_CTRL_4 Register (Address = 624h) [Reset = 5511h]
     // bits[15-8] Fixed data to be sent in Fix data mode
-    int fixed_data = 0x13; // Fixed data (0-255)
+    int fixed_data = 0x03; // Fixed data (0-255)
     // bits[7-6] 0: Incremental data, 1: Fixed data, 2: PRBS, 3: PRBS
     int data_mode = 0; 
     // bits[5-3] Number of bytes of valid pattern in packet (Max - 6) default
     int valid_bytes = 1; // Number of valid bytes * 8 (0-7)
     // bits[2-0] Number of Configures the number of MAC packets to be transmitted by packet
     //generator, 0: 1 packet, 1: 10 packets, 2: 100 packets, 3: 1000 packets... 7: continuous
-    int number_of_packets = 0; // Number of packets to be sent (1-7)
+    int number_of_packets = 1; // Number of packets to be sent (1-7)
 
     reg_value = (fixed_data & 0xFF) << 8;  // bits[15-8]: Fixed data (8 bits)
     reg_value |= (data_mode & 0x3) << 6;    // bits[7-6]: Data mode (2 bits)
@@ -635,11 +643,14 @@ int enable_data_generator_checker(int device) {
     // 8.6.2.10 BISCR Register (Address = 16h) [Reset = 0100h]
     if (LOOPBACK_MODE == PCS)
         error = write_smi_ext(device, 0x0016, 0x0102); // Enable PCS loopback
+    else if (LOOPBACK_MODE == DIGITAL)
+        error = write_smi_ext(device, 0x0016, 0x0104); // Enable Digital loopback 
     else if (LOOPBACK_MODE == AFE)
         error = write_smi_ext(device, 0x0016, 0x0108); // Enable AFE loopback (analog loopback)
-    else if (LOOPBACK_MODE == RMII){
+    else if (LOOPBACK_MODE == RMII)
         error = write_smi_ext(device, 0x0016, 0x0150); //0x150 Enable MII (reverse) loopback
-    }
+    else if (LOOPBACK_MODE == NONE)
+        error = write_smi_ext(device, 0x0016, 0x0100); // back to default
     else{
         printf("Error: No valid loopback mode defined\n");
         return 1; // Return error if no valid loopback mode is defined
@@ -685,4 +696,75 @@ int enable_data_generator_checker(int device) {
 
 
     return error; // Success
+}
+
+/*----------------- Configure transmitt packet --------------------------------*/
+int send_packet(int device) { 
+
+    uint8_t data[47] = {0x00, // Address byte
+                        0x03, // Command byte Write TX DPRAM
+                        0x00,  // Packet data
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x01,
+                        0x00,
+                        0x00,
+                        0x01,
+                        0x02,
+                        0x03,
+                        0x04,
+                        0x05,
+                        0x06,
+                        0x07,
+                        0x08,
+                        0x09,
+                        0x0A,
+                        0x0B,
+                        0x0C,
+                        0x0D,
+                        0x0E,
+                        0x0F,
+                        0x10,
+                        0x11,
+                        0x12,
+                        0x13,
+                        0x14,
+                        0x15,
+                        0x16,
+                        0x17,
+                        0x18,
+                        0x19,
+                        0x1A,
+                        0x1B,
+                        0x1C,
+                        0x1D,
+                        0x1E,
+                        0x1F
+
+    };  // 255 is max spi limit.
+
+    // Send the packet data
+    int error = spi_write_array((uint8_t *)data, sizeof(data));
+    if (error) {
+        printf("Error writing to TXDPRAM\n");
+        return error;
+    }
+
+    // Enable packet transmission
+
+    error = write_register8(0x19, 0x10); // enable packets on port 2
+    if (error) {
+        printf("Error enabling packet transmission: %d\n", error);
+        return error;
+    }
+
+    return 0; // Success
 }
