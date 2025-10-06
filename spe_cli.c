@@ -7,9 +7,13 @@
 #include <string.h>
 #include "spe_cli.h"
 #include "spe_main.h"
+#include "spe_config.h"
 #include "pico/stdlib.h"
 
 #define HISTORY_SIZE 10 // Maximum number of commands to store in history
+
+
+
 
 char command_history[HISTORY_SIZE][MAX_COMMAND_LENGTH]; // Command history buffer
 int history_index = 0; // Index for the next command to be stored
@@ -18,30 +22,39 @@ int history_scroll = -1; // Index for scrolling through history (-1 means no scr
 /*----------------- parse command --------------------------------*/
 int parse_command(char *input){
     char *argv[MAX_ARGUMENTS]; // Array to hold command line arguments
-    int argc;
+    int argc = 0;
+    char *p = input;
+    int in_quotes = 0;
 
-    //volatile int number_of_arguments = 0;
-    //int arg = 0;
-    //int error;
-    //int address, data;
-    //char string_out[MAX_COMMAND_LENGTH];
-    //char character;
-
-    int input_length = strlen(input);
-    
     // Remove trailing newline character
     input[strcspn(input, "\n")] = '\0';
 
-    // Tokenize the input into arguments
-    argc = 0;
-    char *token = strtok(input, " ");
-    while (token != NULL && argc < MAX_ARGUMENTS) {
-        argv[argc++] = token;
-        token = strtok(NULL, " ");
-    }
-    printf("\n>");
+    while (*p) {
+        // Skip leading spaces
+        while (*p == ' ') p++;
 
-    // Process the command
+        if (*p == '"') {
+            in_quotes = 1;
+            p++;
+            argv[argc++] = p;
+            while (*p && *p != '"') p++;
+            if (*p == '"') {
+                *p = '\0';
+                p++;
+            }
+            in_quotes = 0;
+        } else if (*p) {
+            argv[argc++] = p;
+            while (*p && *p != ' ') p++;
+            if (*p) {
+                *p = '\0';
+                p++;
+            }
+        }
+        if (argc >= MAX_ARGUMENTS) break;
+    }
+
+    printf("\n>");
     if (argc > 0) {
         process_command(argc, argv);
         printf(">");
@@ -136,7 +149,36 @@ int process_command(int argc, char *argv[MAX_ARGUMENTS]) {
                 }
             }
         }else printf("Error: w [address] [data]\n");
-    
+
+    }else if (strcmp(argv[0], "spe") == 0) {  //Send Comm data over Single Pair Ethernet
+        if(argc == 3){ // number of arguments
+            device = strtol(argv[1], &endptr, 0);
+            if (*endptr != '\0') {
+                printf("Error: Invalid device '%s'\n", argv[1]);
+                return 1;
+            }
+            spe_send_comm(device, argv[2]);
+        }else printf("Error: invalid arguments t\n");
+
+    }else if (strcmp(argv[0], "config") == 0) {  //Send Comm data over Single Pair Ethernet
+        if(argc == 2){ // number of arguments
+            if(strcmp(argv[1], "md") == 0 ){
+                if(config_data.mode != 1){
+                    config_data.mode = 1;
+                    error=save_config(&config_data);
+                    printf("Set mode to MD. (requires restart)\n");
+                } else printf("Mode already set to MD\n");
+            } else if (strcmp(argv[1], "sd") == 0 ){
+                if(config_data.mode != 0){
+                    config_data.mode = 0;
+                    error=save_config(&config_data);
+                    printf("Set mode to SD. (requires restart)\n");
+                }else printf("Mode already set to SD\n");
+            } else {
+                printf("Error: config [md or sd]\n");
+            }
+        }else printf("Error: invalid arguments t\n");
+
     }else if (strcmp(argv[0], "rot") == 0) {
         if(argc == 1){ // number of arguments
             print_rotation_sensor();
@@ -219,6 +261,9 @@ int process_command(int argc, char *argv[MAX_ARGUMENTS]) {
         printf(" phyx [tdr]           - Time Domain Reflectometry test\n");
         printf(" phyx [sqi]           - Signal Quality Indicator test\n");
         printf(" phyx [gen]           - Packet Generator\n");
+        printf(" phyx [send]          - Enable packet flow\n");
+        printf(" spe [device] [data]  - Send [data] to secondary [device] over SPE\n");
+        printf(" config [mode]        - Set mode = MD or SD (Main or Secondary Device)\n");
         printf(" help (or ?)         - Show this help message\n");
     }else {
         printf("Command not found\n");
@@ -333,7 +378,9 @@ int reset_phy(int device){
         error = write_smi_ext(device, 0x1834, 0x8000); // Bit 14:0b = Configure PHY2 as Slave ie: turn off link
 
     }
-    busy_wait_ms(1000); // wait for 1ms
+    busy_wait_ms(1); // wait for 1ms
+
+
     // Setup PHY in RMII Master mode 011
     
     //error = write_smi_ext(device,  0x001F, 0x8000); //Hardware reset
@@ -365,12 +412,10 @@ error = write_smi_ext(device,  0x003E, 0x0009); //unlisted register
 error = write_smi_ext(device,  0x001F, 0x4000); //Software reset
 error = write_smi_ext(device,  0x0523, 0x0000); //unlisted register
 */
-busy_wait_ms(1000); // wait for 1ms
+busy_wait_ms(1); // wait for 1ms
 //error = write_smi_ext(device,  0x01F, 0x4000); //Software reset
 
-
-
-
+    error = write_register8(FPGA_PACKET_GEN, 1); // Enable packet stream
     return error;
 }
 
@@ -696,6 +741,39 @@ int enable_data_generator_checker(int device) {
 
 
     return error; // Success
+}
+
+int spe_send_comm(int device, uint8_t *data) {
+    int error = 0;
+    uint8_t c_device;
+    size_t len;
+
+
+    len = strlen(data);
+    data[len] = '\r'; // add carriage return
+    data[len + 1] = '\0'; // add null terminator
+    len = len + 1; // update length
+
+    c_device = device;  //convert to char
+
+    // Shift the string one position to the right
+    memmove(data + 3, data, len + 1); // +1 to include the null terminator
+
+    // Insert 3 bytes of SPI header at the beginning
+    data[0] = 0x01;  // Address byte unused by fifo
+    data[1] = FPGA_CMD_WRITE_TX_FIFO;  // Command byte to send to TX fifo
+    data[2] = c_device;  // Secondary device number
+    len = len + 3; // add header length
+
+    printf(" Device: %d Data: %s\n", device, data);
+
+    error = spi_write_array((uint8_t *)data, len);
+    if (error) {
+        printf("Error writing to TX FIFO\n");
+        return error;
+    }
+
+    return 0; // Success
 }
 
 /*----------------- Configure transmitt packet --------------------------------*/

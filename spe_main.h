@@ -17,14 +17,17 @@ int spi_read_register8(int address, int *data);
 int spi_write_register8(int address, int data);
 int spi_write_array(uint8_t *data, size_t length);
 int spi_read_register16(int address, int *data);
+int config_fpga();
+void display(void);
+int comm_try_receive_char(uint8_t *out_char);
+int comm_try_receive_line(char *out_str, size_t max_length);
 
 // FPGA Interface Command Defines
 #define FPGA_CMD_READ_REG 1
 #define FPGA_CMD_WRITE_REG 2
-#define FPGA_CMD_WRITE_TX_DPRAM 3
-#define FPGA_CMD_READ_TX_DPRAM 4
-#define FPGA_CMD_WRITE_RX_DPRAM 5
-#define FPGA_CMD_READ_RX_DPRAM 6
+#define FPGA_CMD_WRITE_TX_FIFO 3
+#define FPGA_CMD_READ_RX_FIFO 4
+
 // Ethernet Phy
 #define FPGA_PHYA_ADDR 0
 #define FPGA_PHYB_ADDR 8
@@ -46,4 +49,9 @@ int spi_read_register16(int address, int *data);
 #define FPGA_ADC4 9
 #define FPGA_DC_ROT_LSB 20
 #define FPGA_DC_ROT_MSB 21
+#define FPGA_DC_KP 22
+#define FPGA_DC_KI 23
+#define FPGA_DC_KD 24
+#define FPGA_PACKET_GEN 25
+#define FPGA_SPI_RD 26
 #endif // SPE_MAIN_H

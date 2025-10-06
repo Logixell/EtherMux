@@ -1,6 +1,13 @@
 #ifndef spe_cli_h
 #define spe_cli_h
-    
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "spe_cli.h"
+#include "spe_main.h"
+#include "pico/stdlib.h"
+
     #define MAX_COMMAND_LENGTH 50
     #define MAX_ARGUMENTS 6
     // select only one of the following loopback options
@@ -30,6 +37,7 @@
     int get_command(char *input,int *pIndex);
     int print_rotation_sensor();
     int enable_data_generator_checker(int device);
-    int send_packet();
+    int spe_send_comm(int device, uint8_t *data);
+    int send_packet(int device);
 
 #endif 

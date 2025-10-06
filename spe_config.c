@@ -1,33 +1,38 @@
 #include "spe_config.h"
 #include "hardware/flash.h"
+#include "hardware/sync.h"
 #include "pico/stdlib.h"
+#include <stdint.h>
+#include <stddef.h>
 #include <string.h>
 
 #define FLASH_STORAGE_OFFSET (2 * 1024 * 1024 - FLASH_SECTOR_SIZE)
 #define XIP_BASE 0x10000000
 
-void save_config(ConfigData *config) {
+int save_config(config_data_t *config) {
     config->magic = CONFIG_MAGIC;
     config->version = CONFIG_VERSION;
-    config->crc32 = calculate_crc32(config, sizeof(ConfigData) - sizeof(uint32_t));
+    config->crc32 = calculate_crc32(config, sizeof(config_data_t) - sizeof(uint32_t));
 
     uint8_t buffer[FLASH_PAGE_SIZE] = {0};
-    memcpy(buffer, config, sizeof(ConfigData));
-
+    memcpy(buffer, config, sizeof(config_data_t));
+    uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(FLASH_STORAGE_OFFSET, FLASH_SECTOR_SIZE);
     flash_range_program(FLASH_STORAGE_OFFSET, buffer, FLASH_PAGE_SIZE);
+    restore_interrupts(ints);
 }
 
-ConfigData load_config() {
-    const ConfigData *stored = (const ConfigData *)(XIP_BASE + FLASH_STORAGE_OFFSET);
-    uint32_t expected_crc = calculate_crc32(stored, sizeof(ConfigData) - sizeof(uint32_t));
+ int load_config(config_data_t *config) {
+    const config_data_t *stored = (const config_data_t *)(XIP_BASE + FLASH_STORAGE_OFFSET);
+    uint32_t expected_crc = calculate_crc32(stored, sizeof(config_data_t) - sizeof(uint32_t));
 
     if (stored->magic == CONFIG_MAGIC &&
         stored->version == CONFIG_VERSION &&
         stored->crc32 == expected_crc) {
-        return *stored;
+        config->mode = stored->mode;
+        return 0;
     } else {
-        return (ConfigData){.magic = CONFIG_MAGIC, .version = CONFIG_VERSION, .mode = 0, .threshold = 1.0f};
+        return 1;
     }
 }
 

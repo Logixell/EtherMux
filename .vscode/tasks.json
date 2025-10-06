@@ -53,6 +53,22 @@
             "windows": {
                 "command": "${env:USERPROFILE}/.pico-sdk/openocd/0.12.0+dev/openocd.exe",
             }
+        },
+        {
+            "label": "Show Binary Size",
+            "type": "process",
+            "command": "${userHome}/.pico-sdk/gcc-arm-none-eabi/bin/arm-none-eabi-size.exe",
+            "args": [
+                "${workspaceFolder}/build/your_project.elf"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": [],
+            "windows": {
+                "command": "${env:USERPROFILE}/.pico-sdk/gcc-arm-none-eabi/bin/arm-none-eabi-size.exe"
+            }
         }
     ]
 }

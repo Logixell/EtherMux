@@ -42,6 +42,8 @@ pico_sdk_init()
 add_executable(spe_main
  spe_main.c
  spe_cli.c
+ ssd1306.c
+ spe_config.c
  )
 
 pico_set_program_name(spe_main "SPE")
@@ -67,6 +69,7 @@ target_include_directories(spe_main PRIVATE
 target_link_libraries(spe_main 
         hardware_spi
         hardware_pio
+        hardware_i2c
         )
 
 pico_add_extra_outputs(spe_main)
