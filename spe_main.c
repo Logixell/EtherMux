@@ -58,6 +58,27 @@ int comm_buffer_index = 0;
 config_data_t config_data = {CONFIG_MAGIC, CONFIG_VERSION, 0, 0.0f, 0}; // Default mode (on a new chip) is SD
 
 
+// empty square icon 16x16
+const uint8_t icon_data_empty[] = { //No link partner found
+    0xFC, 0x02, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,   0x01, 0x01, 0x01, 0x01, 0x01, 0x02, 0xFC, 0x00,
+    0x3F, 0x40, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,   0x80, 0x80, 0x80, 0x80, 0x80, 0x40, 0x3F, 0x00
+};
+const uint8_t icon_data_link[] = { //Link established
+    0xFC, 0x02, 0x81, 0x61, 0x01, 0x01, 0x01, 0x01,   0x01, 0x01, 0x01, 0x01, 0x01, 0x02, 0xFC, 0x00,
+    0x3F, 0x40, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,   0x80, 0x80, 0x80, 0x86, 0x81, 0x41, 0x3F, 0x00
+};
+const uint8_t icon_data_init[] = { //Discovery Mode
+    0xFC, 0x02, 0x81, 0x61, 0x01, 0x81, 0x01, 0x01,   0x01, 0x01, 0x01, 0x01, 0x01, 0x02, 0xFC, 0x00,
+    0x3F, 0x40, 0x80, 0x80, 0x80, 0x8F, 0x80, 0x80,   0x80, 0x80, 0x80, 0x86, 0x81, 0x41, 0x3F, 0x00
+};
+const uint8_t icon_data_active[] = { // Full data flowing
+    0xFC, 0x02, 0x81, 0x61, 0x01, 0x81, 0x01, 0xF1,   0x01, 0xFD, 0x01, 0x01, 0x01, 0x02, 0xFC, 0x00,
+    0x3F, 0x40, 0x80, 0x80, 0x80, 0x8F, 0x80, 0x83,   0x80, 0x9F, 0x80, 0x86, 0x81, 0x41, 0x3F, 0x00
+};
+const uint8_t icon_data_closed[] = { //Port not Available
+    0xF8, 0x04, 0x02, 0x12, 0x22, 0x42, 0x82, 0x02,   0x82, 0x42, 0x22, 0x12, 0x02, 0x04, 0xF8, 0x00,
+    0x3F, 0x40, 0x80, 0x90, 0x88, 0x84, 0x82, 0x81,   0x82, 0x84, 0x88, 0x90, 0x80, 0x40, 0x3F, 0x00
+};
 /*----------------- LED Blink setup --------------------------------*/
 void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
     blink_program_init(pio, sm, offset, pin);
@@ -246,20 +267,14 @@ int config_fpga(){
 
 }
 
-void display(void) {
-    const char *words[]= {"OpenSPE.org", "MODE:", "   MD     ",
-        "uvwxyz1234567890","OpenSPE.org", "MASTER DEVICE"};
+void display(ssd1306_t *disp, char *line1) {
 
-    ssd1306_t disp;
-    disp.external_vcc=false;
-    ssd1306_init(&disp, 128, 64, 0x3C, i2c_default);
-    ssd1306_clear(&disp);
-
-    printf("DISPLAY!\n");
-
+    // The small display only draws on odd numberd y axis
+    const char *words[]= {"MODE:", "Future use"};
     char buf_mode[8];
 
-        //sleep_ms(1000);
+    ssd1306_clear(disp);
+
         if (config_data.mode == 0) {
             snprintf(buf_mode, sizeof(buf_mode), "SD");
         } else if (config_data.mode == 1) {
@@ -267,11 +282,40 @@ void display(void) {
         } else {
             snprintf(buf_mode, sizeof(buf_mode), "ERR");
         }
-        //ssd1306_draw_string(&disp, 0, 0*16, 2, words[0]);
-        ssd1306_draw_string(&disp, 10 * 2, 1 * 16, 2, words[1]);
-        ssd1306_draw_string(&disp, 10 * 8, 1 * 16, 2, buf_mode);
-        ssd1306_show(&disp);
+        ssd1306_draw_string(disp, 50, 0 * 18, 1, line1);
+       // ssd1306_draw_string(disp, 0 * 2, 1 * 9, 2, words[0]);
+        ssd1306_draw_string(disp, 0 * 16, 0 * 9, 2, buf_mode);
+       // ssd1306_draw_string(disp, 0 * 8, 3 * 16, 2, words[3]);
+        //ssd1306_draw_line(disp, 0, 31, 60, 31);
+        //ssd1306_draw_line(disp, 68, 31, 127, 31);
+        //draw_icon(disp, 25, 16, 16, 16, icon_data_empty);
+        if (config_data.mode == 0) {
+            draw_icon(disp, 2*16, 16, 16, 16, icon_data_empty);
+            draw_icon(disp, 5*16, 16, 16, 16, icon_data_active);
+        } else if (config_data.mode == 1) {
+            draw_icon(disp, 2*16, 16, 16, 16, icon_data_closed);
+            draw_icon(disp, 5*16, 16, 16, 16, icon_data_active);
+        } else {
+            draw_icon(disp, 25, 16, 16, 16, icon_data_empty);
+        }
+        //draw_icon(disp, 85, 16, 16, 16, icon_data_active);
+        ssd1306_show(disp);
 
+}
+
+// Draw Icon
+void draw_icon(ssd1306_t *disp, uint8_t x, uint8_t y, uint8_t width, uint8_t height, const uint8_t *icon_data) {
+    for (int i = 0; i < width; ++i) {
+        for (int j = 0; j < height; ++j) {
+            int byte_index = (i + (j / 8) * width);
+            int bit_index = j % 8;
+            if (icon_data[byte_index] & (1 << bit_index)) {
+                ssd1306_draw_pixel(disp, x + i, y + j);
+            } else {
+               // ssd1306_clear_pixel(disp, x + i, y + j);
+            }
+        }
+    }
 }
 
 /*----------------- main --------------------------------*/
@@ -324,12 +368,26 @@ int main()
     // For more pio examples see https://github.com/raspberrypi/pico-examples/tree/master/pio
 
     // Set up our UART
+    // Bug uart interface to FPGA has been replaced with SPI interface
     uart_init(UART_ID, BAUD_RATE);
     uart_set_format(UART_ID, 8, 2, UART_PARITY_NONE);   // Set the TX and RX pins by using the function select on the GPIO
     // Set datasheet for more information on function select
     gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
     
+    // Wait for USB or UART to become available
+    // while (!stdio_usb_connected() && !uart_is_writable(uart0)) {
+    //     sleep_ms(100);
+    // }
+
+    // if (stdio_usb_connected()) {
+    //     printf("User connected via USB serial.\n");
+    // } else if (uart_is_writable(uart0)) {
+    //     printf("User connected via UART.\n");
+    // } else {
+    //     printf("No serial connection detected.\n");
+    // }
+
     // Use some the various UART functions to send out data
     // In a default system, printf will also output via the default UART
     
@@ -338,9 +396,24 @@ int main()
     //int magicNumber = 0x1f;
     // For more examples of UART use see https://github.com/raspberrypi/pico-examples/tree/master/uart
 
-    // Read config data from flash
+    // Read config data from flash (stores MD or SD mode)
     load_config(&config_data);
 
+    // Configure FPGA
+    printf("Program FPGA...\n");
+    //config_fpga();  // BUG Board B2401 does not have CSN/SN (pin R8) connected, so we cannot program the FPGA on that board
+    // Wait for FPGA to be ready
+    x=0;
+    do{
+        read_register8(FPGA_VERSION, &x);
+        sleep_ms(100);
+    }while (x != 0xa1);
+    // Initialize FPGA registers
+    if (config_data.mode == 0) { // SD mode
+        write_register8(FPGA_CTRL, 0x01); // enable RX
+    } else if (config_data.mode == 1) { // MD mode
+        write_register8(FPGA_CTRL, 0x02); // enable TX
+    }
     // setup I2C
     i2c_init(i2c_default, 100 * 1000); // Use i2c_default instead of i2c0
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
@@ -348,12 +421,14 @@ int main()
     gpio_pull_up(I2C_SDA);
     gpio_pull_up(I2C_SCL);
     printf("jumping to display...\n");
-    display();
+    
+    ssd1306_t disp;
+    disp.external_vcc=false;
+    //   ssd1306_init(&disp, 128, 64, 0x3C, i2c_default);  // large screen
+    ssd1306_init(&disp, 128, 32, 0x3C, i2c_default);  // small screen
+    display(&disp, "OpenSPE.org");
 
 
-    // Configure FPGA
-
-    config_fpga();
 
     char input[MAX_COMMAND_LENGTH] = "test string";
     int index = 0;
@@ -373,7 +448,9 @@ int main()
             print_rotation_sensor();
         }
         if(comm_try_receive_line(&comm_buffer[0], MAX_COMM_BUFFER_SIZE)){
-            printf("Received: %s", comm_buffer);
+            printf("Received: %s\r", comm_buffer);
+            display(&disp, comm_buffer);
+
         }
         gpio_put(PIN_STEP, 0);
         busy_wait_ms(1);
@@ -392,8 +469,6 @@ int comm_try_receive_char(uint8_t *out_char) {
 
     error = read_register8(FPGA_SPI_RD, &x);
     if(x & 0x01){ //bit 0 is fifo empty flag
-        return 0; // No character received
-    } else {
         //read a character from the FPGA
         // Select the SPI device by setting CS low
         gpio_put(PIN_CS, 0);
@@ -404,7 +479,10 @@ int comm_try_receive_char(uint8_t *out_char) {
         busy_wait_us(1);
         gpio_put(PIN_CS, 1);
         *out_char = spi_data;
-        return 1; // Character received
+
+        return 1; //character received
+    } else {
+        return 0; // no Character received
     } 
 }
 

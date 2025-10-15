@@ -368,7 +368,11 @@ int reset_phy(int device){
         error = write_register8(FPGA_CTRL, data); 
         data = data | 0x03; // set wake and reset bit (creates 37uS resetb pulse)
         error = write_register8(FPGA_CTRL, data); 
-        error = write_smi_ext(device, 0x1834, 0xC000); // Bit 14:1b = Configure PHY1 as MASTER
+        if (config_data.mode == 0) { // SD mode
+            error = write_smi_ext(device, 0x1834, 0x8000); // Bit 14:0b = Configure PHY2 as Slave ie: turn off link
+        } else if (config_data.mode == 1) { // MD mode
+            error = write_smi_ext(device, 0x1834, 0xC000); // Bit 14:1b = Configure PHY1 as MASTER
+        }
 
     } else if (device == 2 ){
         data = data & 0xEF; // clear reset bit
@@ -412,10 +416,21 @@ error = write_smi_ext(device,  0x003E, 0x0009); //unlisted register
 error = write_smi_ext(device,  0x001F, 0x4000); //Software reset
 error = write_smi_ext(device,  0x0523, 0x0000); //unlisted register
 */
+
+// Setup phy to send a recovered clock on CLKOUT pin
+error = write_smi_ext(device,  0x045F, 0x0F); // LED1_CLKOUT_ANA_CTRL
+error = write_smi_ext(device,  0x0453, 0x41); // IOMUX_CFG_2
+
 busy_wait_ms(1); // wait for 1ms
 //error = write_smi_ext(device,  0x01F, 0x4000); //Software reset
 
-    error = write_register8(FPGA_PACKET_GEN, 1); // Enable packet stream
+    if (config_data.mode == 0) { // SD mode
+        error = write_register8(FPGA_PACKET_GEN, 0x01); // Enable packet stream
+    } else if (config_data.mode == 1) { // MD mode
+        error = write_register8(FPGA_PACKET_GEN, 0x81); // set to master mode and enable packet stream
+    }
+
+
     return error;
 }
 
@@ -510,18 +525,25 @@ int write_smi_ext(int device, int address, int data){
         error = write_smi(device, ADDAR, address);
         error = write_smi(device, REGCR, 0x401F);
         error = write_smi(device, ADDAR, data);
+        // The datasheet does not say to clear REGCR but without doing this the 
+        //write is not implemented until the next write.  This behavior was 
+        // observed writing to 0x453
+        error = write_smi(device, REGCR, 0);  
     }else if(address < 0x1FFF){ //MMD1 0x1000-0x1FFF - Write Address Operation
         address = address & 0xFFF; // convert to MMD address
         error = write_smi(device, REGCR, 0x1);
         error = write_smi(device, ADDAR, address);
         error = write_smi(device, REGCR, 0x4001);
         error = write_smi(device, ADDAR, data);
+        error = write_smi(device, REGCR, 0);
+
     }else if(address < 0x3002){ //MMD3 0x3000-0x3001 - Write Address Operation
         address = address & 0xFFF; // convert to MMD address
         error = write_smi(device, REGCR, 0x3);
         error = write_smi(device, ADDAR, address);
         error = write_smi(device, REGCR, 0x4003);
         error = write_smi(device, ADDAR, data);
+        error = write_smi(device, REGCR, 0);
 
     } else error =1; //error address not found
 

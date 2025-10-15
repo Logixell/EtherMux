@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "ssd1306.h"
 
 #ifndef SPE_MAIN_H
 #define SPE_MAIN_H
@@ -18,7 +19,8 @@ int spi_write_register8(int address, int data);
 int spi_write_array(uint8_t *data, size_t length);
 int spi_read_register16(int address, int *data);
 int config_fpga();
-void display(void);
+void display(ssd1306_t *disp, char *line1);
+void draw_icon(ssd1306_t *p, uint8_t x_offset, uint8_t y_offset, uint8_t width, uint8_t height, const uint8_t *icon_data);
 int comm_try_receive_char(uint8_t *out_char);
 int comm_try_receive_line(char *out_str, size_t max_length);
 
