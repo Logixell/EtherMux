@@ -2,7 +2,8 @@
 #include <string.h>
 #include "pico/stdlib.h"
 #include "hardware/spi.h"
-#include "hardware/pio.h"
+//#include "hardware/pio.h"
+#include "hardware/gpio.h"
 #include "hardware/uart.h"
 #include "blink.pio.h"
 #include "spe_cli.h"
@@ -243,15 +244,28 @@ int spi_read_register16(int address, int *data){
 
 /*-----------------  FPGA configuration --------------------------------*/
 int config_fpga(){
+    uint8_t config_data;
+    unsigned int i;
+
     gpio_put(PIN_FPGA_PROG, 0);  // hold FPGA in reset
     sleep_ms(1);
     gpio_put(PIN_FPGA_PROG, 1);  // release reset and start programming configuration data
     sleep_ms(1);
     //BUG Board B2401 does not have CSN/SN (pin R8) connected, so we cannot program the FPGA on that board
+    //using Slave SPI mode.  However we can use Slave Serial mode using the SPI interface to clock in the data.
     gpio_put(PIN_CS, 0);  // start SPI transfer
 
-    for (int i = 0; i < fpga_config_len; i++) {
-        spi_write_blocking(SPI_PORT, &fpga_config[i], 1);
+
+    //To guarantee proper recognition of the synchronization word it is recommended that the synchronization 
+    //word always be preceded by a minimum of 128 ‘1’ bits.
+    for (i = 0; i < 128/8; i++) {
+        config_data = 0xFF;
+        spi_write_blocking(SPI_PORT, &config_data, 1);
+    }
+
+    for (i = header; i < fpga_config_len; i++) {
+        config_data = fpga_config[i];
+        spi_write_blocking(SPI_PORT, &config_data, 1);
     }
 
     gpio_put(PIN_CS, 1);  // end SPI transfer
@@ -261,7 +275,8 @@ int config_fpga(){
     if (done) {
         printf("Bitstream loaded successfully!\n");
     } else {
-        printf("Bitstream load failed.\n");
+        --i;// to show last byte written
+        printf("Bitstream load failed. %u : %x\n", i, config_data);
     }
 
 
@@ -329,6 +344,7 @@ int main()
     int x;
 
     // Initialize the stdio library
+
     stdio_init_all();
 
     // SPI initialisation. This example will use SPI at 1MHz.
@@ -337,17 +353,26 @@ int main()
     printf("SPE FPGA Controller\n");
 
     gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
-    gpio_set_function(PIN_CS,   GPIO_FUNC_SIO);
     gpio_set_function(PIN_SCK,  GPIO_FUNC_SPI);
     gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
- 
-    gpio_set_function(PIN_STEP,  GPIO_FUNC_SIO);
-    gpio_set_function(PIN_DIR,   GPIO_FUNC_SIO);
+
+
+ // Set SPI format: 8 bits per transfer, CPOL=0, CPHA=0, MSB-first
+    spi_set_format(SPI_PORT, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
+
+    // Initialize CS as a normal GPIO (SIO) pin
+    gpio_init(PIN_CS);
+
+    // Initialize step/dir pins as normal GPIO (SIO) pins and set directions
+    gpio_init(PIN_STEP);
+    gpio_init(PIN_DIR);
     gpio_set_dir(PIN_STEP, GPIO_OUT);
     gpio_set_dir(PIN_DIR, GPIO_OUT);
-    //setup FPGA programming pins
-    gpio_set_function(PIN_FPGA_DONE, GPIO_FUNC_SIO);
-    gpio_set_function(PIN_FPGA_PROG, GPIO_FUNC_SIO);
+
+    // setup FPGA programming pins as normal GPIO (SIO) pins
+    gpio_init(PIN_FPGA_DONE);
+    gpio_init(PIN_FPGA_PROG);
     gpio_set_dir(PIN_FPGA_PROG, GPIO_OUT);
 
     // Chip select is active-low, so we'll initialise it to a driven-high state
@@ -401,13 +426,13 @@ int main()
 
     // Configure FPGA
     printf("Program FPGA...\n");
-    //config_fpga();  // BUG Board B2401 does not have CSN/SN (pin R8) connected, so we cannot program the FPGA on that board
+    config_fpga();  // Board must be set to Slave Serial mode for this to work
     // Wait for FPGA to be ready
     x=0;
-    do{
-        read_register8(FPGA_VERSION, &x);
-        sleep_ms(100);
-    }while (x != 0xa1);
+    //do{
+    //    read_register8(FPGA_VERSION, &x);
+    //    sleep_ms(100);
+    //}while (x != 0xa1);
     // Initialize FPGA registers
     if (config_data.mode == 0) { // SD mode
         write_register8(FPGA_CTRL, 0x01); // enable RX
@@ -426,7 +451,7 @@ int main()
     disp.external_vcc=false;
     //   ssd1306_init(&disp, 128, 64, 0x3C, i2c_default);  // large screen
     ssd1306_init(&disp, 128, 32, 0x3C, i2c_default);  // small screen
-    display(&disp, "OpenSPE.org");
+    display(&disp, "EtherMUX.com");
 
 
 
