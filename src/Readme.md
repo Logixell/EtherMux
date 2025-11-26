@@ -1,0 +1,2 @@
+# Status
+This codebase is currently in transition between the proof of concept hardware and the next version.  Command line is working but the rest would not be usefull until the new hardware files are released here.
