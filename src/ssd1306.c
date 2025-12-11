@@ -41,8 +41,12 @@ inline static void swap(int32_t *a, int32_t *b) {
     *b=*t;
 }
 
-inline static void fancy_write(i2c_inst_t *i2c, uint8_t addr, const uint8_t *src, size_t len, char *name) {
-    switch(i2c_write_blocking(i2c, addr, src, len, false)) {
+inline static int fancy_write(i2c_inst_t *i2c, uint8_t addr, const uint8_t *src, size_t len, char *name) {
+    int error;
+    
+    error = i2c_write_blocking(i2c, addr, src, len, false);
+    // the following is comented because we are returning the error codes instead.
+    /*switch(error) {
     case PICO_ERROR_GENERIC:
         printf("[%s] addr not acknowledged!\n", name);
         break;
@@ -53,14 +57,18 @@ inline static void fancy_write(i2c_inst_t *i2c, uint8_t addr, const uint8_t *src
         //printf("[%s] wrote successfully %lu bytes!\n", name, len);
         break;
     }
+    */
+    return error;
 }
 
-inline static void ssd1306_write(ssd1306_t *p, uint8_t val) {
+inline static int ssd1306_write(ssd1306_t *p, uint8_t val) {
     uint8_t d[2]= {0x00, val};
-    fancy_write(p->i2c_i, p->address, d, 2, "ssd1306_write");
+    return fancy_write(p->i2c_i, p->address, d, 2, "ssd1306_write");
 }
 
-bool ssd1306_init(ssd1306_t *p, uint16_t width, uint16_t height, uint8_t address, i2c_inst_t *i2c_instance) {
+int ssd1306_init(ssd1306_t *p, uint16_t width, uint16_t height, uint8_t address, i2c_inst_t *i2c_instance) {
+    int err, error=0;
+
     p->width=width;
     p->height=height;
     p->pages=height/8;
@@ -72,7 +80,7 @@ bool ssd1306_init(ssd1306_t *p, uint16_t width, uint16_t height, uint8_t address
     p->bufsize=(p->pages)*(p->width);
     if((p->buffer=malloc(p->bufsize+1))==NULL) {
         p->bufsize=0;
-        return false;
+        return PICO_ERROR_BUFFER_TOO_SMALL;
     }
 
     ++(p->buffer);
@@ -111,10 +119,12 @@ bool ssd1306_init(ssd1306_t *p, uint16_t width, uint16_t height, uint8_t address
         0x00,  // horizontal
     };
 
-    for(size_t i=0; i<sizeof(cmds); ++i)
-        ssd1306_write(p, cmds[i]);
+    for(size_t i=0; i<sizeof(cmds); ++i){
+        err = ssd1306_write(p, cmds[i]);
+        if(err) error = err;
+    }
 
-    return true;
+    return error;
 }
 
 inline void ssd1306_deinit(ssd1306_t *p) {

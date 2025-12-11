@@ -346,6 +346,28 @@ int main()
     // Initialize the stdio library
 
     stdio_init_all();
+    // Wait for USB or UART to become available
+    //while (!stdio_usb_connected() && !uart_is_writable(uart0)) {
+    //while (!stdio_usb_connected()) {
+         sleep_ms(2000);
+    //}
+
+    /*if (stdio_usb_connected()) {
+         printf("User connected via USB serial.\n");
+     } else if (uart_is_writable(uart0)) {
+         printf("User connected via UART.\n");
+     } else {
+         printf("No serial connection detected.\n");
+     }
+*/
+
+    // Use some the various UART functions to send out data
+    // In a default system, printf will also output via the default UART
+    
+    // Send out a string, with CR/LF conversions
+    //uart_puts(UART_ID, " Hello, UART!\n");
+    //int magicNumber = 0x1f;
+    // For more examples of UART use see https://github.com/raspberrypi/pico-examples/tree/master/uart
 
     // SPI initialisation. This example will use SPI at 1MHz.
     x=spi_init(SPI_PORT, 1000*1000);
@@ -400,33 +422,13 @@ int main()
     gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
     
-    // Wait for USB or UART to become available
-    // while (!stdio_usb_connected() && !uart_is_writable(uart0)) {
-    //     sleep_ms(100);
-    // }
-
-    // if (stdio_usb_connected()) {
-    //     printf("User connected via USB serial.\n");
-    // } else if (uart_is_writable(uart0)) {
-    //     printf("User connected via UART.\n");
-    // } else {
-    //     printf("No serial connection detected.\n");
-    // }
-
-    // Use some the various UART functions to send out data
-    // In a default system, printf will also output via the default UART
-    
-    // Send out a string, with CR/LF conversions
-    //uart_puts(UART_ID, " Hello, UART!\n");
-    //int magicNumber = 0x1f;
-    // For more examples of UART use see https://github.com/raspberrypi/pico-examples/tree/master/uart
 
     // Read config data from flash (stores MD or SD mode)
     load_config(&config_data);
 
     // Configure FPGA
     printf("Program FPGA...\n");
-    config_fpga();  // Board must be set to Slave Serial mode for this to work
+    //config_fpga();  // Board must be set to Slave Serial mode for this to work
     // Wait for FPGA to be ready
     x=0;
     //do{
@@ -445,13 +447,20 @@ int main()
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA);
     gpio_pull_up(I2C_SCL);
-    printf("jumping to display...\n");
     
     ssd1306_t disp;
     disp.external_vcc=false;
-    //   ssd1306_init(&disp, 128, 64, 0x3C, i2c_default);  // large screen
-    ssd1306_init(&disp, 128, 32, 0x3C, i2c_default);  // small screen
-    display(&disp, "EtherMUX.com");
+
+    printf("Display screen ");
+    if(ssd1306_init(&disp, 128, 32, 0x3C, i2c_default) != 0){// small screen 128x32 pixel
+        disp.active = false;
+        printf("not found\n"); // SSD1306 initialization failed!
+    }  
+    else {
+        printf("found\n");
+        disp.active = true;
+    }
+    if (disp.active) display(&disp, "EtherMUX.com");
 
 
 
@@ -474,7 +483,7 @@ int main()
         }
         if(comm_try_receive_line(&comm_buffer[0], MAX_COMM_BUFFER_SIZE)){
             printf("Received: %s\r", comm_buffer);
-            display(&disp, comm_buffer);
+            if (disp.active) display(&disp, comm_buffer);
 
         }
         gpio_put(PIN_STEP, 0);

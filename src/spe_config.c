@@ -7,7 +7,9 @@
 #include <string.h>
 
 #define FLASH_STORAGE_OFFSET (2 * 1024 * 1024 - FLASH_SECTOR_SIZE)
-#define XIP_BASE 0x10000000
+#ifndef XIP_BASE
+#define XIP_BASE 0x10000000  // (only if you really need a local value)
+#endif
 
 int save_config(config_data_t *config) {
     config->magic = CONFIG_MAGIC;
