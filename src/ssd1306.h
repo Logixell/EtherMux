@@ -65,6 +65,7 @@ typedef struct {
     uint8_t pages;		/**< stores pages of display (calculated on initialization*/
     uint8_t address; 	/**< i2c address of display*/
     i2c_inst_t *i2c_i; 	/**< i2c connection instance */
+	bool active;		/**< whether display is active / installed*/
     bool external_vcc; 	/**< whether display uses external vcc */ 
     uint8_t *buffer;	/**< display buffer */
     size_t bufsize;		/**< buffer size */
@@ -83,7 +84,7 @@ typedef struct {
 *	@retval true for Success
 *	@retval false if initialization failed
 */
-bool ssd1306_init(ssd1306_t *p, uint16_t width, uint16_t height, uint8_t address, i2c_inst_t *i2c_instance);
+int ssd1306_init(ssd1306_t *p, uint16_t width, uint16_t height, uint8_t address, i2c_inst_t *i2c_instance);
 
 /**
 *	@brief deinitialize display

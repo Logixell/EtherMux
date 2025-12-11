@@ -45,5 +45,9 @@
         "ssd1306.h": "c",
         "flash.h": "c",
         "stdlib.h": "c"
-    }
+    },
+    "vscode-serial-monitor.dataBits": 8,
+    "vscode-serial-monitor.lineEnding": "\r",
+    "vscode-serial-monitor.parity": "none",
+    "vscode-serial-monitor.stopBits": 1
 }
