@@ -35,6 +35,7 @@
             "type": "cortex-debug",
             "servertype": "external",
             "gdbTarget": "localhost:3333",
+            //"gdbPath": "C:/Users/Tom/.pico-sdk/toolchain/bin/arm-none-eabi-gdb.exe",  //ai generated
             "gdbPath": "${command:raspberry-pi-pico.getGDBPath}",
             "device": "${command:raspberry-pi-pico.getChipUppercase}",
             "svdFile": "${userHome}/.pico-sdk/sdk/2.2.0/src/${command:raspberry-pi-pico.getChip}/hardware_regs/${command:raspberry-pi-pico.getChipUppercase}.svd",

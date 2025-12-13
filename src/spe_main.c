@@ -25,28 +25,18 @@
 #define PIN_SCK  18 //GP18=pin 24
 #define PIN_MOSI 19 //GP19=pin 25
 
-#define PIN_STEP 14 //GP14=pin 19
-#define PIN_DIR  15 //GP15=pin 20
+#define LED_PIN 25 // On-board LED
 
 //FPGA config (also uses spi0 above)
 #define PIN_FPGA_PROG  13 //GP13=pin 17
 #define PIN_FPGA_DONE   12 //GP12=pin 16  --BUG not connected on v0.1 board
 
-//Display
-#define I2C_SDA 4 // GP4=pin 6
-#define I2C_SCL 5 // GP5=pin 7
-
-
-// UART defines
-// By default the stdout UART is `uart0`, so we will use the second one
-#define UART_ID uart1
-#define BAUD_RATE 115200
-
-// Use pins 4 and 5 for UART1
-// Pins can be changed, see the GPIO function select table in the datasheet for information on GPIO assignments
-#define UART_TX_PIN 4  //GP4=pin 6
-#define UART_RX_PIN 5  //GP5=pin 7
-
+//I2C0 pins (Qwiic)
+#define I2C0_SDA 4 // GP4=pin 6
+#define I2C0_SCL 5 // GP5=pin 7
+// I2C1 pins (Display)
+#define I2C1_SDA 2 // GP2 = pin 4
+#define I2C1_SCL 3 // GP3 = pin 5
 
 #define MAX_TOKENS 10
 #define MAX_TOKEN_LENGTH 50
@@ -81,6 +71,7 @@ const uint8_t icon_data_closed[] = { //Port not Available
     0x3F, 0x40, 0x80, 0x90, 0x88, 0x84, 0x82, 0x81,   0x82, 0x84, 0x88, 0x90, 0x80, 0x40, 0x3F, 0x00
 };
 /*----------------- LED Blink setup --------------------------------*/
+/*
 void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
     blink_program_init(pio, sm, offset, pin);
     pio_sm_set_enabled(pio, sm, true);
@@ -91,7 +82,7 @@ void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
     // input (wait for n + 1; mov; jmp)
     pio->txf[sm] = (125000000 / (2 * freq)) - 3;
 }
-
+*/
 
 /*----------------- Read FPGA register 8 bit --------------------------------*/
 int read_register8(int address, int *data ){
@@ -182,7 +173,7 @@ int spi_write_array(uint8_t *data, size_t length) {
 }
 
 
-
+/*
 int uart_read_register8(int address, int *data){
     uint8_t tx_data[2];
     tx_data[0] = address;
@@ -212,6 +203,7 @@ int uart_write_register8(int address, int data){
         return 0;
     } else return 1; //error could not write to UART
 }
+*/
 
 /*----------------- SPI Read FPGA register 16 bit --------------------------------*/
 int spi_read_register16(int address, int *data){
@@ -341,56 +333,40 @@ int scroll = 0;
 
 int main()
 {
-    int x;
+    int x, error;
 
     // Initialize the stdio library
 
     stdio_init_all();
-    // Wait for USB or UART to become available
-    //while (!stdio_usb_connected() && !uart_is_writable(uart0)) {
-    //while (!stdio_usb_connected()) {
-         sleep_ms(2000);
-    //}
 
-    /*if (stdio_usb_connected()) {
-         printf("User connected via USB serial.\n");
-     } else if (uart_is_writable(uart0)) {
-         printf("User connected via UART.\n");
-     } else {
-         printf("No serial connection detected.\n");
-     }
-*/
+    // LED
+    gpio_init(LED_PIN);
+    gpio_set_dir(LED_PIN, GPIO_OUT);
+    gpio_put(LED_PIN, 1);
 
-    // Use some the various UART functions to send out data
-    // In a default system, printf will also output via the default UART
-    
-    // Send out a string, with CR/LF conversions
-    //uart_puts(UART_ID, " Hello, UART!\n");
-    //int magicNumber = 0x1f;
-    // For more examples of UART use see https://github.com/raspberrypi/pico-examples/tree/master/uart
+    sleep_ms(2000);  // wait for serial to connect
+    printf("\n\n");
+    if (stdio_usb_connected()) {
+         printf("USB serial available\n");
+    };
+    if (uart_is_writable(uart0)) {
+        printf("UART available\n");
+    } else {
+        printf("No serial connection detected.\n");
+    }
 
     // SPI initialisation. This example will use SPI at 1MHz.
     x=spi_init(SPI_PORT, 1000*1000);
-    printf("\nSPI clock rate %d Hz\n", x);
-    printf("SPE FPGA Controller\n");
+    printf("SPI clock rate %d Hz\n", x);
 
     gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
     gpio_set_function(PIN_SCK,  GPIO_FUNC_SPI);
     gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
 
-
  // Set SPI format: 8 bits per transfer, CPOL=0, CPHA=0, MSB-first
     spi_set_format(SPI_PORT, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
-
-
     // Initialize CS as a normal GPIO (SIO) pin
     gpio_init(PIN_CS);
-
-    // Initialize step/dir pins as normal GPIO (SIO) pins and set directions
-    gpio_init(PIN_STEP);
-    gpio_init(PIN_DIR);
-    gpio_set_dir(PIN_STEP, GPIO_OUT);
-    gpio_set_dir(PIN_DIR, GPIO_OUT);
 
     // setup FPGA programming pins as normal GPIO (SIO) pins
     gpio_init(PIN_FPGA_DONE);
@@ -400,31 +376,17 @@ int main()
     // Chip select is active-low, so we'll initialise it to a driven-high state
     gpio_set_dir(PIN_CS, GPIO_OUT);
     gpio_put(PIN_CS, 1);
-    // For more examples of SPI use see https://github.com/raspberrypi/pico-examples/tree/master/spi
 
-    // PIO Blinking example
-    PIO pio = pio0;
-    uint offset = pio_add_program(pio, &blink_program);
-    printf("Loaded blink program at %d\n", offset);
-    
-    #ifdef PICO_DEFAULT_LED_PIN
-    blink_pin_forever(pio, 0, offset, PICO_DEFAULT_LED_PIN, 3);
-    #else
-    blink_pin_forever(pio, 0, offset, 6, 3);
-    #endif
-    // For more pio examples see https://github.com/raspberrypi/pico-examples/tree/master/pio
-
-    // Set up our UART
-    // Bug uart interface to FPGA has been replaced with SPI interface
-    uart_init(UART_ID, BAUD_RATE);
-    uart_set_format(UART_ID, 8, 2, UART_PARITY_NONE);   // Set the TX and RX pins by using the function select on the GPIO
-    // Set datasheet for more information on function select
-    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
-    
 
     // Read config data from flash (stores MD or SD mode)
     load_config(&config_data);
+        printf("SPE ");
+    if (config_data.mode == 0) { // SD mode
+        printf("SECONDARY");
+    } else if (config_data.mode == 1) { // MD mode
+        printf("MAIN");
+    }
+    printf(" Device Controller\n");
 
     // Configure FPGA
     printf("Program FPGA...\n");
@@ -442,19 +404,24 @@ int main()
         write_register8(FPGA_CTRL, 0x02); // enable TX
     }
     // setup I2C
-    i2c_init(i2c_default, 100 * 1000); // Use i2c_default instead of i2c0
-    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SDA);
-    gpio_pull_up(I2C_SCL);
+    i2c_init(i2c1, 100 * 1000); // Use 100khz I2C clock
+    gpio_set_function(I2C1_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(I2C1_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(I2C1_SDA);
+    gpio_pull_up(I2C1_SCL);
     
     ssd1306_t disp;
     disp.external_vcc=false;
 
     printf("Display screen ");
-    if(ssd1306_init(&disp, 128, 32, 0x3C, i2c_default) != 0){// small screen 128x32 pixel
+
+    error = ssd1306_init(&disp, 128, 32, 0x3C, i2c1);  // small screen 128x32 pixel
+    if(error < 0){// positive error value is number of bytes written (good thing)
         disp.active = false;
+        gpio_put(LED_PIN, 0);
         printf("not found\n"); // SSD1306 initialization failed!
+        sleep_ms(1000);  // turn off led for one second if no display found
+        gpio_put(LED_PIN, 1);
     }  
     else {
         printf("found\n");
@@ -468,7 +435,6 @@ int main()
     int index = 0;
     uint8_t comm;
 
-    gpio_put(PIN_DIR, 0);
     reset_phy(1); // reset phy 1
     reset_phy(2); // reset phy 2
     
@@ -486,11 +452,6 @@ int main()
             if (disp.active) display(&disp, comm_buffer);
 
         }
-        gpio_put(PIN_STEP, 0);
-        busy_wait_ms(1);
-        gpio_put(PIN_STEP, 1);
-        busy_wait_ms(1);
-
 
     }
 }
