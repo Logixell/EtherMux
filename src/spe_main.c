@@ -28,15 +28,15 @@
 #define LED_PIN 25 // On-board LED
 
 //FPGA config (also uses spi0 above)
-#define PIN_FPGA_PROG  13 //GP13=pin 17
-#define PIN_FPGA_DONE   12 //GP12=pin 16  --BUG not connected on v0.1 board
+#define PIN_FPGA_PROG  22 //GP22=pin 
+#define PIN_FPGA_DONE   24 //GP24=pin   --BUG not connected on v0.1 board
 
 //I2C0 pins (Qwiic)
 #define I2C0_SDA 4 // GP4=pin 6
 #define I2C0_SCL 5 // GP5=pin 7
 // I2C1 pins (Display)
-#define I2C1_SDA 2 // GP2 = pin 4
-#define I2C1_SCL 3 // GP3 = pin 5
+#define I2C1_SDA 6 // GP6 = pin 
+#define I2C1_SCL 7 // GP7 = pin 
 
 #define MAX_TOKENS 10
 #define MAX_TOKEN_LENGTH 50
@@ -234,15 +234,18 @@ int spi_read_register16(int address, int *data){
     return 0; //no error
 }
 
-/*-----------------  FPGA configuration --------------------------------*/
+/*-----------------  FPGA configuration (Slave Serial) --------------------------------*/
 int config_fpga(){
     uint8_t config_data;
     unsigned int i;
 
+    //Note: The config guide does not require the Prog pin to be used in Slave Serial mode, however
+    // this way we can reconfigure the FPGA without power cycling  (should we want to do this in the future). 
     gpio_put(PIN_FPGA_PROG, 0);  // hold FPGA in reset
     sleep_ms(1);
     gpio_put(PIN_FPGA_PROG, 1);  // release reset and start programming configuration data
-    sleep_ms(1);
+    // Note: The config guide suggests waiting for INITN to go high here but we will just wait a fixed time
+    sleep_ms(1);  // tinitl max = 55ns
     //BUG Board B2401 does not have CSN/SN (pin R8) connected, so we cannot program the FPGA on that board
     //using Slave SPI mode.  However we can use Slave Serial mode using the SPI interface to clock in the data.
     gpio_put(PIN_CS, 0);  // start SPI transfer
@@ -349,9 +352,13 @@ int main()
     if (stdio_usb_connected()) {
          printf("USB serial available\n");
     };
+    // uart0 default 115200 baud rate on GP0 (TX) and GP1 (RX)
+    // uart0 is connected to J11 for serial console and also goes
+    // to the FPGA where it can be routed to J15 TX:GPIO14, RX:GPIO15
+    
     if (uart_is_writable(uart0)) {
-        printf("UART available\n");
-    } else {
+        printf("UART available. Default Speed: 115200\n");
+    } else {  // this should never happen as uart0 is always available...
         printf("No serial connection detected.\n");
     }
 
