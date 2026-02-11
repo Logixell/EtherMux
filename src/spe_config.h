@@ -8,10 +8,15 @@
 #define CONFIG_MAGIC 0xDEADBEEF
 #define CONFIG_VERSION 1
 
+//Device configuration data structure stored in flash
+#define CONFIG_SD 0
+#define CONFIG_MD 1
+
 typedef struct {
     uint32_t magic;       // Validates presence
     uint32_t version;     // Tracks structure version
     uint32_t mode;        // MD or SD mode
+    uint32_t sd_num;        // SD number (for SD mode)
     float threshold;      // Another example
     uint32_t crc32;       // CRC of all fields above
 

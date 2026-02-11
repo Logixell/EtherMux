@@ -1,3 +1,11 @@
+/*  
+    EtherMux Open Source Protocol for Single Pair Ethernet 
+
+    Copyright (c) 2026 Thomas Gsell Ethermux.com 
+    This file may be distributed under the terms of the GNU GPL-3.0 license.
+*/
+
+
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
@@ -32,8 +40,11 @@
 #define PIN_FPGA_DONE   24 //GP24=pin   --BUG not connected on v0.1 board
 
 //I2C0 pins (Qwiic)
-#define I2C0_SDA 4 // GP4=pin 6
-#define I2C0_SCL 5 // GP5=pin 7
+#define QWIIC_PORT i2c0
+#define QWIIC_SDA 4 // GP4=pin 6
+#define QWIIC_SCL 5 // GP5=pin 7
+#define MODULINO_KNOB_ADDR 0XB0 //I2C address of Modulino knob 0X76 + 0X3A
+
 // I2C1 pins (Display)
 #define I2C1_SDA 6 // GP6 = pin 
 #define I2C1_SCL 7 // GP7 = pin 
@@ -45,8 +56,6 @@
 
 uint8_t comm_buffer[MAX_COMM_BUFFER_SIZE];
 int comm_buffer_index = 0;
-
-config_data_t config_data = {CONFIG_MAGIC, CONFIG_VERSION, 0, 0.0f, 0}; // Default mode (on a new chip) is SD
 
 
 // empty square icon 16x16
@@ -83,6 +92,31 @@ void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
     pio->txf[sm] = (125000000 / (2 * freq)) - 3;
 }
 */
+
+// --- Modulino Knob Read 16-bit rotation value ---
+int16_t knob_read_rotation(void) {
+    uint8_t reg = 0x00;
+    uint8_t buf[9];
+
+
+// Scan 12c bus for devices (for debugging)
+    for(uint8_t reg = 1; reg < 127; reg++) {
+
+        // Select register
+    
+        i2c_write_blocking(QWIIC_PORT, MODULINO_KNOB_ADDR, &reg, 1, true);
+
+        i2c_read_blocking(QWIIC_PORT, MODULINO_KNOB_ADDR, buf,8, false);
+        
+        printf("address 0x%02X Data 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n", reg, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+        
+    }
+
+
+    return (int16_t)((buf[0] << 8) | buf[1]);
+}
+
+
 
 /*----------------- Read FPGA register 8 bit --------------------------------*/
 int read_register8(int address, int *data ){
@@ -238,18 +272,25 @@ int spi_read_register16(int address, int *data){
 int config_fpga(){
     uint8_t config_data;
     unsigned int i;
+    bool done;
 
     //Note: The config guide does not require the Prog pin to be used in Slave Serial mode, however
     // this way we can reconfigure the FPGA without power cycling  (should we want to do this in the future). 
-    gpio_put(PIN_FPGA_PROG, 0);  // hold FPGA in reset
+    gpio_set_oeover(PIN_FPGA_PROG, GPIO_OVERRIDE_NORMAL);
+        gpio_put(PIN_FPGA_PROG, 0);  // hold FPGA in reset
     sleep_ms(1);
     gpio_put(PIN_FPGA_PROG, 1);  // release reset and start programming configuration data
     // Note: The config guide suggests waiting for INITN to go high here but we will just wait a fixed time
     sleep_ms(1);  // tinitl max = 55ns
-    //BUG Board B2401 does not have CSN/SN (pin R8) connected, so we cannot program the FPGA on that board
-    //using Slave SPI mode.  However we can use Slave Serial mode using the SPI interface to clock in the data.
-    gpio_put(PIN_CS, 0);  // start SPI transfer
 
+    done = gpio_get(PIN_FPGA_DONE);
+    if (done) {
+        printf("Warning: Done pin did not reset\n");  // DONE should be low here
+    } 
+
+    //Note: Board B2401 does not have CSN/SN (pin R8) connected, so we cannot program the FPGA on that board
+    //using Slave SPI mode.  However we can use Slave Serial mode using the SPI interface to clock in the data.
+    //Infact Slave serial mode is much simpler so we will keep using it until we find a need for the extra features of Slave SPI mode.
 
     //To guarantee proper recognition of the synchronization word it is recommended that the synchronization 
     //word always be preceded by a minimum of 128 ‘1’ bits.
@@ -263,31 +304,29 @@ int config_fpga(){
         spi_write_blocking(SPI_PORT, &config_data, 1);
     }
 
-    gpio_put(PIN_CS, 1);  // end SPI transfer
-
     sleep_ms(10);
-    bool done = gpio_get(PIN_FPGA_DONE);
+    done = gpio_get(PIN_FPGA_DONE);
     if (done) {
-        printf("Bitstream loaded successfully!\n");
+        printf("FPGA Bitstream loaded successfully!\n");
     } else {
         --i;// to show last byte written
-        printf("Bitstream load failed. %u : %x\n", i, config_data);
+        printf("FPGA Bitstream load failed. Done pin still low. %u : %x\n", i, config_data);
     }
-
-
+    gpio_set_oeover(PIN_FPGA_PROG, GPIO_OVERRIDE_LOW);  //High Z, Allow JTAG port to program FPGA if needed 
+return 0;
 }
 
 void display(ssd1306_t *disp, char *line1) {
 
-    // The small display only draws on odd numberd y axis
+    // The small display only draws on odd numbered y axis
     const char *words[]= {"MODE:", "Future use"};
     char buf_mode[8];
 
     ssd1306_clear(disp);
 
-        if (config_data.mode == 0) {
-            snprintf(buf_mode, sizeof(buf_mode), "SD");
-        } else if (config_data.mode == 1) {
+        if (config_data.mode == CONFIG_SD) {
+            snprintf(buf_mode, sizeof(buf_mode), "SD%d", config_data.sd_num);
+        } else if (config_data.mode == CONFIG_MD) {
             snprintf(buf_mode, sizeof(buf_mode), "MD");
         } else {
             snprintf(buf_mode, sizeof(buf_mode), "ERR");
@@ -299,14 +338,14 @@ void display(ssd1306_t *disp, char *line1) {
         //ssd1306_draw_line(disp, 0, 31, 60, 31);
         //ssd1306_draw_line(disp, 68, 31, 127, 31);
         //draw_icon(disp, 25, 16, 16, 16, icon_data_empty);
-        if (config_data.mode == 0) {
-            draw_icon(disp, 2*16, 16, 16, 16, icon_data_empty);
-            draw_icon(disp, 5*16, 16, 16, 16, icon_data_active);
-        } else if (config_data.mode == 1) {
-            draw_icon(disp, 2*16, 16, 16, 16, icon_data_closed);
-            draw_icon(disp, 5*16, 16, 16, 16, icon_data_active);
+        if (config_data.mode == CONFIG_SD) {
+            draw_icon(disp, 0*16, 16, 16, 16, icon_data_empty);
+            draw_icon(disp, 4*16, 16, 16, 16, icon_data_active);
+        } else if (config_data.mode == CONFIG_MD) {
+            draw_icon(disp, 4, 16, 16, 16, icon_data_closed);
+            draw_icon(disp, 4*16+4, 16, 16, 16, icon_data_active);
         } else {
-            draw_icon(disp, 25, 16, 16, 16, icon_data_empty);
+            draw_icon(disp, 4*16, 16, 16, 16, icon_data_empty);
         }
         //draw_icon(disp, 85, 16, 16, 16, icon_data_active);
         ssd1306_show(disp);
@@ -339,6 +378,7 @@ int main()
     int x, error;
 
     // Initialize the stdio library
+
 
     stdio_init_all();
 
@@ -379,31 +419,38 @@ int main()
     gpio_init(PIN_FPGA_DONE);
     gpio_init(PIN_FPGA_PROG);
     gpio_set_dir(PIN_FPGA_PROG, GPIO_OUT);
+    gpio_set_oeover(PIN_FPGA_PROG, GPIO_OVERRIDE_LOW);  //High Z, Allow JTAG to program FPGA if needed 
 
     // Chip select is active-low, so we'll initialise it to a driven-high state
     gpio_set_dir(PIN_CS, GPIO_OUT);
     gpio_put(PIN_CS, 1);
 
+    config_data.sd_num = 89; // Default SD number is 1 (if in SD mode)
 
     // Read config data from flash (stores MD or SD mode)
     load_config(&config_data);
         printf("SPE ");
     if (config_data.mode == 0) { // SD mode
-        printf("SECONDARY");
+        printf("SECONDARY (SD%d)", config_data.sd_num);
     } else if (config_data.mode == 1) { // MD mode
-        printf("MAIN");
+        printf("MAIN (MD)");
     }
     printf(" Device Controller\n");
 
     // Configure FPGA
     printf("Program FPGA...\n");
-    //config_fpga();  // Board must be set to Slave Serial mode for this to work
-    // Wait for FPGA to be ready
+    config_fpga();  // Board must be set to Slave Serial mode for this to work
+  
     x=0;
-    //do{
-    //    read_register8(FPGA_VERSION, &x);
-    //    sleep_ms(100);
-    //}while (x != 0xa1);
+    read_register8(FPGA_VERSION, &x);
+    if (x == FPGA_EXPECTED_VERSION) {
+        printf("FPGA Version %02x OK\n", x);
+    } else if (x == 0x00){
+        printf("FPGA Version %02x failed\n", x);
+    } else {
+        printf("FPGA Version mismatch: %02x (expected %02x)\n", x, FPGA_EXPECTED_VERSION);
+    }
+
     // Initialize FPGA registers
     if (config_data.mode == 0) { // SD mode
         write_register8(FPGA_CTRL, 0x01); // enable RX
@@ -436,7 +483,14 @@ int main()
     }
     if (disp.active) display(&disp, "EtherMUX.com");
 
-
+    // Initialize QWIIC I2C port
+    i2c_init(i2c0, 100 * 1000); // Use 100khz I2C clock
+    gpio_set_function(QWIIC_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(QWIIC_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(QWIIC_SDA);
+    gpio_pull_up(QWIIC_SCL);
+    printf("Modulino Knob test starting...\n");
+    knob_read_rotation();
 
     char input[MAX_COMMAND_LENGTH] = "test string";
     int index = 0;
@@ -445,8 +499,10 @@ int main()
     reset_phy(1); // reset phy 1
     reset_phy(2); // reset phy 2
     
-    printf(">");
+    print_prompt();
     while (true) { // Loop forever
+  
+        gpio_put(LED_PIN, 0);
 
         if(get_command(input, &index)){
             parse_command(input);
@@ -454,12 +510,11 @@ int main()
         else if(scroll > 0){
             print_rotation_sensor();
         }
+        gpio_put(LED_PIN, 1);
         if(comm_try_receive_line(&comm_buffer[0], MAX_COMM_BUFFER_SIZE)){
             printf("Received: %s\r", comm_buffer);
             if (disp.active) display(&disp, comm_buffer);
-
         }
-
     }
 }
 

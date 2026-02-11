@@ -24,6 +24,7 @@
     // FPGA Interface Type
 
     int parse_command(char *input);
+    void print_prompt();
     int process_command(int argc, char *argv[MAX_ARGUMENTS]);
     int reset_phy(int device);
     int phy_tdr(int device);

@@ -1,3 +1,12 @@
+/*  
+    EtherMux Open Source Protocol for Single Pair Ethernet 
+    Non-volatile configuration storage implementation for Raspberry Pi Pico
+
+    Copyright (c) 2026 Thomas Gsell Ethermux.com 
+    This file may be distributed under the terms of the GNU GPL-3.0 license.
+*/
+
+
 #include "spe_config.h"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
@@ -10,6 +19,9 @@
 #ifndef XIP_BASE
 #define XIP_BASE 0x10000000  // (only if you really need a local value)
 #endif
+
+config_data_t config_data = {CONFIG_MAGIC, CONFIG_VERSION, 0, 0.0f, 0}; // Default mode (on a new chip) is SD
+
 
 int save_config(config_data_t *config) {
     config->magic = CONFIG_MAGIC;

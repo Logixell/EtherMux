@@ -1,4 +1,4 @@
-[![EtherMUX Logo](assets/EtherMUX117px.gif)](https://ethermux.com)
+[![EtherMUX Logo](assets/EtherMUXLogo100pix.gif)](https://ethermux.com)
 # EtherMux is a protocol designed to run over Single Pair Ethernet (SPE).  
 ## Status: Architecture/Design Phase  
 ## Comming Soon: https://EtherMUX.com
@@ -14,8 +14,8 @@ Ultra low latency signaling combined with serial data transport.
 
 ![Wire Diagram](assets/WireDiagram.png)
 
-|📂 src   | Source code for Pico microcontroller|  
-|----------|--------------------------------------|
-|📂 Docs   |  Documentation|  
-|📂 Download |  Pre-Compiled files ready to install.|  
+  📂 src:  Source code for Pico microcontroller  
+  📂 Docs:  Documentation
+
+Releases: Precompiled .UDF files will reside in the release section.
 

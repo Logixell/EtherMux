@@ -1,7 +1,17 @@
+/*  
+    EtherMux Open Source Protocol for Single Pair Ethernet 
+    Command Line Interface (CLI) implementation for EtherMux device
+
+    Copyright (c) 2026 Thomas Gsell Ethermux.com 
+    This file may be distributed under the terms of the GNU GPL-3.0 license.
+*/
+
 /* NO SDK LIBRARIES ARE ALLOWED IN THIS FILE 
     functions in this libary are not to include any SDK libraries.
     This file is to remain portable to any SDK.
+    All hardware specific code should be in spe_main.c and called from here.
 */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,13 +63,20 @@ int parse_command(char *input){
         }
         if (argc >= MAX_ARGUMENTS) break;
     }
-
-    printf("\n>");
+    printf("\n");
     if (argc > 0) {
         process_command(argc, argv);
-        printf(">");
     } else {
         scroll = 0;
+    }
+    print_prompt();
+}
+
+void print_prompt() {
+    if (config_data.mode == CONFIG_SD) {
+        printf("SD%d>", config_data.sd_num);
+    } else {
+        printf("MD>");
     }
 }
 
@@ -644,7 +661,9 @@ int get_command(char *input, int *pIndex) {  // This is a non-blocking function
                         strncpy(input, command_history[history_pos], MAX_COMMAND_LENGTH);
                         *pIndex = strlen(input);
                         printf("\033[2K"); // Clear the current line
-                        printf("\r>%s", input); // Display the command
+                        printf("\r");
+                        print_prompt();
+                        printf("%s", input); // Display the command
                     }
                 }
                 if (c == 'B') { // Down arrow
@@ -654,13 +673,16 @@ int get_command(char *input, int *pIndex) {  // This is a non-blocking function
                         strncpy(input, command_history[history_pos], MAX_COMMAND_LENGTH);
                         *pIndex = strlen(input);
                         printf("\033[2K"); // Clear the current line
-                        printf("\r>%s", input); // Display the command
+                        printf("\r"); 
+                        print_prompt();
+                        printf("%s", input); // Display the command
                     } else if (history_scroll == 0) {
                         history_scroll = -1;
                         *pIndex = 0;
                         input[0] = '\0';
                         printf("\033[2K"); // Clear the current line
-                        printf("\r>"); // Clear the input
+                        printf("\r"); // Clear the input
+                        print_prompt();
                     }
                 }
             }
