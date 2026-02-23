@@ -273,6 +273,8 @@ int process_command(int argc, char *argv[MAX_ARGUMENTS]) {
         printf(" write (or w)[address] [data]   - Write FPGA register\n");
         printf(" read  (or r) smi(1 or 2) [address]       - Read SMIx register \n");
         printf(" write (or w) smi(1 or 2) [address] [data] - Write SMIx register\n");
+        printf(" rsh [x]              - Future: remote shell [Device #]\n");
+        printf(" exit                 - Future: Exit shell\n");
         printf(" rot                  - Print rotation sensor\n");
         printf(" reset phy [device]   - Reset PHY [device=1 or 2]\n");
         printf(" phyx [tdr]           - Time Domain Reflectometry test\n");

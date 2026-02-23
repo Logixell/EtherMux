@@ -484,13 +484,13 @@ int main()
     if (disp.active) display(&disp, "EtherMUX.com");
 
     // Initialize QWIIC I2C port
-    i2c_init(i2c0, 100 * 1000); // Use 100khz I2C clock
-    gpio_set_function(QWIIC_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(QWIIC_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(QWIIC_SDA);
-    gpio_pull_up(QWIIC_SCL);
-    printf("Modulino Knob test starting...\n");
-    knob_read_rotation();
+ //   i2c_init(i2c0, 100 * 1000); // Use 100khz I2C clock
+ //   gpio_set_function(QWIIC_SDA, GPIO_FUNC_I2C);
+ //   gpio_set_function(QWIIC_SCL, GPIO_FUNC_I2C);
+ //   gpio_pull_up(QWIIC_SDA);
+ //   gpio_pull_up(QWIIC_SCL);
+  //  printf("Modulino Knob test starting...\n");
+  //  knob_read_rotation();
 
     char input[MAX_COMMAND_LENGTH] = "test string";
     int index = 0;
@@ -512,7 +512,7 @@ int main()
         }
         gpio_put(LED_PIN, 1);
         if(comm_try_receive_line(&comm_buffer[0], MAX_COMM_BUFFER_SIZE)){
-            printf("Received: %s\r", comm_buffer);
+            printf("Received: %s\n", comm_buffer);
             if (disp.active) display(&disp, comm_buffer);
         }
     }
@@ -525,7 +525,7 @@ int comm_try_receive_char(uint8_t *out_char) {
     uint8_t tx_data[2] = {0,FPGA_CMD_READ_RX_FIFO};  // address is don't care for fifo read
 
     error = read_register8(FPGA_SPI_RD, &x);
-    if(x & 0x01){ //bit 0 is fifo empty flag
+    if((x & 0x01) == 1){ //bit 0 is fifo empty flag
         //read a character from the FPGA
         // Select the SPI device by setting CS low
         gpio_put(PIN_CS, 0);
