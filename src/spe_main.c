@@ -325,7 +325,11 @@ void display(ssd1306_t *disp, char *line1) {
     ssd1306_clear(disp);
 
         if (config_data.mode == CONFIG_SD) {
-            snprintf(buf_mode, sizeof(buf_mode), "SD%d", config_data.sd_num);
+            if(config_data.sd_num > 0){
+                 snprintf(buf_mode, sizeof(buf_mode), "SD%d", config_data.sd_num);
+            } else {
+                snprintf(buf_mode, sizeof(buf_mode), "SD?");
+            }
         } else if (config_data.mode == CONFIG_MD) {
             snprintf(buf_mode, sizeof(buf_mode), "MD");
         } else {
@@ -418,14 +422,14 @@ int main()
     // setup FPGA programming pins as normal GPIO (SIO) pins
     gpio_init(PIN_FPGA_DONE);
     gpio_init(PIN_FPGA_PROG);
-    gpio_set_dir(PIN_FPGA_PROG, GPIO_OUT);
     gpio_set_oeover(PIN_FPGA_PROG, GPIO_OVERRIDE_LOW);  //High Z, Allow JTAG to program FPGA if needed 
+    gpio_set_dir(PIN_FPGA_PROG, GPIO_OUT);
 
     // Chip select is active-low, so we'll initialise it to a driven-high state
     gpio_set_dir(PIN_CS, GPIO_OUT);
     gpio_put(PIN_CS, 1);
 
-    config_data.sd_num = 89; // Default SD number is 1 (if in SD mode)
+    config_data.sd_num = 0; // Default SD number is 0 which means not connected (if in SD mode)
 
     // Read config data from flash (stores MD or SD mode)
     load_config(&config_data);
@@ -438,7 +442,7 @@ int main()
     printf(" Device Controller\n");
 
     // Configure FPGA
-    printf("Program FPGA...\n");
+ //   printf("Dissabled Program FPGA...\n");
     config_fpga();  // Board must be set to Slave Serial mode for this to work
   
     x=0;
@@ -451,12 +455,6 @@ int main()
         printf("FPGA Version mismatch: %02x (expected %02x)\n", x, FPGA_EXPECTED_VERSION);
     }
 
-    // Initialize FPGA registers
-    if (config_data.mode == 0) { // SD mode
-        write_register8(FPGA_CTRL, 0x01); // enable RX
-    } else if (config_data.mode == 1) { // MD mode
-        write_register8(FPGA_CTRL, 0x02); // enable TX
-    }
     // setup I2C
     i2c_init(i2c1, 100 * 1000); // Use 100khz I2C clock
     gpio_set_function(I2C1_SDA, GPIO_FUNC_I2C);
@@ -494,10 +492,14 @@ int main()
 
     char input[MAX_COMMAND_LENGTH] = "test string";
     int index = 0;
+    int loop_counter = 0;
+    int hop_number = 0;
+    int prev_hop_number = 0;
     uint8_t comm;
 
-    reset_phy(1); // reset phy 1
+    // phy 2 provides clock to phy 1, so we reset it first to avoid link instability during reset
     reset_phy(2); // reset phy 2
+    reset_phy(1); // reset phy 1
     
     print_prompt();
     while (true) { // Loop forever
@@ -514,6 +516,17 @@ int main()
         if(comm_try_receive_line(&comm_buffer[0], MAX_COMM_BUFFER_SIZE)){
             printf("Received: %s\n", comm_buffer);
             if (disp.active) display(&disp, comm_buffer);
+        }
+ 
+        if(loop_counter++ > 10000){ // print prompt every 10K loops to show alive status
+            hop_number = get_hop();
+            if(hop_number != prev_hop_number){
+                printf("HOP: %d\n", hop_number);
+                config_data.sd_num = hop_number;
+                if (disp.active) display(&disp, "EtherMUX.com");
+                prev_hop_number = hop_number;
+            }
+            loop_counter = 0;
         }
     }
 }
@@ -563,4 +576,10 @@ int comm_try_receive_line(char *out_str, size_t max_length) {
         }
     }
     return 0; // No complete line received yet
+}
+
+int get_hop() {
+    int x,error;
+    error = read_register8(FPGA_HOP, &x);
+    return x;
 }

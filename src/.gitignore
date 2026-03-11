@@ -2,3 +2,4 @@ build
 !.vscode/*
 fpgabitstream.h
 fpgaconfig.bat
+! /build/spe_main.uf2

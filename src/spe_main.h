@@ -23,6 +23,7 @@ void display(ssd1306_t *disp, char *line1);
 void draw_icon(ssd1306_t *p, uint8_t x_offset, uint8_t y_offset, uint8_t width, uint8_t height, const uint8_t *icon_data);
 int comm_try_receive_char(uint8_t *out_char);
 int comm_try_receive_line(char *out_str, size_t max_length);
+int get_hop();
 
 // FPGA Interface Command Defines
 #define FPGA_CMD_READ_REG 1
@@ -56,4 +57,5 @@ int comm_try_receive_line(char *out_str, size_t max_length);
 #define FPGA_DC_KD 24
 #define FPGA_PACKET_GEN 25
 #define FPGA_SPI_RD 26
+#define FPGA_HOP 31
 #endif // SPE_MAIN_H

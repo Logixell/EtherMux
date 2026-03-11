@@ -74,6 +74,11 @@ int parse_command(char *input){
 
 void print_prompt() {
     if (config_data.mode == CONFIG_SD) {
+        if(config_data.sd_num > 0){
+             printf("SD%d>", config_data.sd_num);
+        } else {
+             printf("SD?>");
+        }
         printf("SD%d>", config_data.sd_num);
     } else {
         printf("MD>");
@@ -204,15 +209,15 @@ int process_command(int argc, char *argv[MAX_ARGUMENTS]) {
 
     }else if (strcmp(argv[0], "reset") == 0) {
         if(argc == 1){ // general board reset all
-            device = 1;
-            while(device < 3){ //reset ethernet phys
+            device = 2; // start with phy 2 to avoid link instability during reset
+            while(device >0){ //reset ethernet phys
                 error = reset_phy(device);
                 if(!error){
                     printf("Reset PHY %d\n", device);
                 }else{
                    printf("Error: No Response\n");
                 }
-                ++device;
+                --device;
             };
 
         }else if(argc == 3){ // number of arguments
@@ -376,27 +381,29 @@ int phy_sqi(int device) {
 /*----------- reset and initialize ethernet phy -------------------*/
 int reset_phy(int device){
     int error;
-    int data = 0x00;
+    int data,original_data = 0x00;
+
+ //   error = write_register8(FPGA_PACKET_GEN, 0x0); // Disable packet stream
 
     error = write_smi_ext(device, 0x1F, 0x8000); // Hardware reset PHY
-//busy_wait_ms(1000); // wait for 1ms
+    busy_wait_ms(1); // wait for 1ms
 
-    error = read_register8(FPGA_CTRL, &data); 
+    error = read_register8(FPGA_CTRL, &original_data); 
     if(device == 1 ){
-        data = data & 0xFE; // clear reset bit
+        data = original_data & 0xFE; // clear reset bit
         error = write_register8(FPGA_CTRL, data); 
-        data = data | 0x03; // set wake and reset bit (creates 37uS resetb pulse)
+        data = original_data | 0x03; // set wake and reset bit (creates 37uS resetb pulse)
         error = write_register8(FPGA_CTRL, data); 
-        if (config_data.mode == 0) { // SD mode
-            error = write_smi_ext(device, 0x1834, 0x8000); // Bit 14:0b = Configure PHY2 as Slave ie: turn off link
-        } else if (config_data.mode == 1) { // MD mode
+ //       if (config_data.mode == 0) { // SD mode
+ //           error = write_smi_ext(device, 0x1834, 0x8000); // Bit 14:0b = Configure PHY2 as Slave ie: turn off link
+ //       } else if (config_data.mode == 1) { // MD mode
             error = write_smi_ext(device, 0x1834, 0xC000); // Bit 14:1b = Configure PHY1 as MASTER
-        }
+ //       }
 
     } else if (device == 2 ){
-        data = data & 0xEF; // clear reset bit
+        data = original_data & 0xEF; // clear reset bit
         error = write_register8(FPGA_CTRL, data); 
-        data = data | 0x30; // set wake and reset bit
+        data = original_data | 0x30; // set wake and reset bit
         error = write_register8(FPGA_CTRL, data); 
         error = write_smi_ext(device, 0x1834, 0x8000); // Bit 14:0b = Configure PHY2 as Slave ie: turn off link
 
@@ -443,11 +450,13 @@ error = write_smi_ext(device,  0x0453, 0x41); // IOMUX_CFG_2
 busy_wait_ms(1); // wait for 1ms
 //error = write_smi_ext(device,  0x01F, 0x4000); //Software reset
 
+if(device == 2){ // enable only when both phys have been configured to avoid link instability
     if (config_data.mode == 0) { // SD mode
         error = write_register8(FPGA_PACKET_GEN, 0x01); // Enable packet stream
     } else if (config_data.mode == 1) { // MD mode
         error = write_register8(FPGA_PACKET_GEN, 0x81); // set to master mode and enable packet stream
     }
+}
 
 
     return error;
