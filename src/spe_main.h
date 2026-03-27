@@ -19,10 +19,10 @@ int spi_write_register8(int address, int data);
 int spi_write_array(uint8_t *data, size_t length);
 int spi_read_register16(int address, int *data);
 int config_fpga();
-void display(ssd1306_t *disp, char *line1);
+void display(ssd1306_t *disp);
 void draw_icon(ssd1306_t *p, uint8_t x_offset, uint8_t y_offset, uint8_t width, uint8_t height, const uint8_t *icon_data);
-int comm_try_receive_char(uint8_t *out_char);
-int comm_try_receive_line(char *out_str, size_t max_length);
+int comm_try_receive_char(uint8_t *out_char, uint8_t com_port);
+int comm_try_receive_line(uint8_t com_port);
 int get_hop();
 
 // FPGA Interface Command Defines
@@ -58,4 +58,14 @@ int get_hop();
 #define FPGA_PACKET_GEN 25
 #define FPGA_SPI_RD 26
 #define FPGA_HOP 31
+
+#define BIT_0_MASK 0x01 // Bit 0 mask
+#define BIT_1_MASK 0x02 // Bit 1 mask
+#define BIT_2_MASK 0x04 // Bit 2 mask
+#define BIT_3_MASK 0x08 // Bit 3 mask
+#define BIT_4_MASK 0x10 // Bit 4 mask
+#define BIT_5_MASK 0x20 // Bit 5 mask
+#define BIT_6_MASK 0x40 // Bit 6 mask
+#define BIT_7_MASK 0x80 // Bit 7 mask
+
 #endif // SPE_MAIN_H

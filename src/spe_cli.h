@@ -17,6 +17,10 @@
     #define RMII 3
     #define DIGITAL 4
     #define NONE 5  //you must use None if you want the packet generator to send out to MDI
+    #define MD_PORT 254
+    #define BROADCAST_PORT 255
+    #define OUTBOUND_FIFO_ADDR 1
+    #define INBOUND_FIFO_ADDR 2
 
     // SMI registers
     #define REGCR 0x0D
@@ -35,10 +39,12 @@
     int write_smi(int device, int address, int data);
 
 //    int copy_argument(char *input, char *output, int arg);
+    int get_link_status(int device);
     int get_command(char *input,int *pIndex);
     int print_rotation_sensor();
     int enable_data_generator_checker(int device);
     int spe_send_comm(int device, uint8_t *data);
-    int send_packet(int device);
+    int set_loopback_mode(int mode); // 0=none 1=RMII
+    void enable_comm(int enable); // 0=disable 1=enable
 
 #endif 

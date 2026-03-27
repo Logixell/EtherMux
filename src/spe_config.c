@@ -21,7 +21,7 @@
 #endif
 
 config_data_t config_data = {CONFIG_MAGIC, CONFIG_VERSION, 0, 0.0f, 0}; // Default mode (on a new chip) is SD
-
+status_t status = {0, 0}; // Default link status is down for both links
 
 int save_config(config_data_t *config) {
     config->magic = CONFIG_MAGIC;

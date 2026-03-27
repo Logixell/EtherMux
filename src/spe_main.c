@@ -54,8 +54,8 @@
 
 #define MAX_COMM_BUFFER_SIZE 256
 
-uint8_t comm_buffer[MAX_COMM_BUFFER_SIZE];
-int comm_buffer_index = 0;
+char comm_buffer[2][MAX_COMM_BUFFER_SIZE];
+int comm_buffer_index[2] = {0, 0};
 
 
 // empty square icon 16x16
@@ -79,6 +79,11 @@ const uint8_t icon_data_closed[] = { //Port not Available
     0xF8, 0x04, 0x02, 0x12, 0x22, 0x42, 0x82, 0x02,   0x82, 0x42, 0x22, 0x12, 0x02, 0x04, 0xF8, 0x00,
     0x3F, 0x40, 0x80, 0x90, 0x88, 0x84, 0x82, 0x81,   0x82, 0x84, 0x88, 0x90, 0x80, 0x40, 0x3F, 0x00
 };
+const uint8_t icon_data_loopback[] = { //Port in Loopback mode
+    0xFC, 0x02, 0x01, 0x01, 0x11, 0x11, 0x11, 0x11,   0x11, 0x11, 0x21, 0xC1, 0x01, 0x02, 0xFC, 0x00,
+    0x3F, 0x40, 0x80, 0x88, 0x9C, 0xAA, 0x88, 0x88,   0x88, 0x88, 0x84, 0x83, 0x80, 0x40, 0x3F, 0x00
+};
+
 /*----------------- LED Blink setup --------------------------------*/
 /*
 void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
@@ -316,43 +321,54 @@ int config_fpga(){
 return 0;
 }
 
-void display(ssd1306_t *disp, char *line1) {
+void display(ssd1306_t *disp) {
 
     // The small display only draws on odd numbered y axis
-    const char *words[]= {"MODE:", "Future use"};
+ //   const char *words[]= {"MODE:", "Future use"};
     char buf_mode[8];
 
     ssd1306_clear(disp);
 
         if (config_data.mode == CONFIG_SD) {
-            if(config_data.sd_num > 0){
+            if(config_data.sd_num > 0 && config_data.sd_num < 100){
                  snprintf(buf_mode, sizeof(buf_mode), "SD%d", config_data.sd_num);
+            } else if(config_data.sd_num > 99){ // remove "D" if more than 99 SDs to save space on display
+                snprintf(buf_mode, sizeof(buf_mode), "S%d", config_data.sd_num);
             } else {
-                snprintf(buf_mode, sizeof(buf_mode), "SD?");
+                 snprintf(buf_mode, sizeof(buf_mode), "SD?");
             }
         } else if (config_data.mode == CONFIG_MD) {
             snprintf(buf_mode, sizeof(buf_mode), "MD");
         } else {
             snprintf(buf_mode, sizeof(buf_mode), "ERR");
         }
-        ssd1306_draw_string(disp, 50, 0 * 18, 1, line1);
-       // ssd1306_draw_string(disp, 0 * 2, 1 * 9, 2, words[0]);
+        ssd1306_draw_string(disp, 50, 0 * 18, 1, status.display_message);
         ssd1306_draw_string(disp, 0 * 16, 0 * 9, 2, buf_mode);
-       // ssd1306_draw_string(disp, 0 * 8, 3 * 16, 2, words[3]);
-        //ssd1306_draw_line(disp, 0, 31, 60, 31);
-        //ssd1306_draw_line(disp, 68, 31, 127, 31);
-        //draw_icon(disp, 25, 16, 16, 16, icon_data_empty);
         if (config_data.mode == CONFIG_SD) {
-            draw_icon(disp, 0*16, 16, 16, 16, icon_data_empty);
-            draw_icon(disp, 4*16, 16, 16, 16, icon_data_active);
+            if(status.link1) {
+                draw_icon(disp, 4*16, 16, 16, 16, icon_data_active);
+            } else if(status.port1_loopback){ // if loopback mode enabled, show loopback icon
+                 draw_icon(disp, 4*16, 16, 16, 16, icon_data_loopback);
+            } else {
+                draw_icon(disp, 4*16, 16, 16, 16, icon_data_empty);
+            }
+            if(status.link2) {
+                draw_icon(disp, 0*16, 16, 16, 16, icon_data_active);
+            } else {
+                draw_icon(disp, 0*16, 16, 16, 16, icon_data_empty);
+            }
         } else if (config_data.mode == CONFIG_MD) {
             draw_icon(disp, 4, 16, 16, 16, icon_data_closed);
-            draw_icon(disp, 4*16+4, 16, 16, 16, icon_data_active);
+            if(status.link1){
+                 draw_icon(disp, 4*16+4, 16, 16, 16, icon_data_active);
+            } else {
+                draw_icon(disp, 4*16+4, 16, 16, 16, icon_data_empty);
+            }
         } else {
             draw_icon(disp, 4*16, 16, 16, 16, icon_data_empty);
         }
-        //draw_icon(disp, 85, 16, 16, 16, icon_data_active);
         ssd1306_show(disp);
+        status.update_display = 0; // Clear the update flag
 
 }
 
@@ -371,8 +387,23 @@ void draw_icon(ssd1306_t *disp, uint8_t x, uint8_t y, uint8_t width, uint8_t hei
     }
 }
 
+void set_display_message(const char *message) {
+    if (message == NULL) {
+        status.display_message[0] = '\0';
+        return;
+    }
+
+    size_t msg_len = strlen(message);
+    if (msg_len >= MAX_MESSAGE_LENGTH) {
+        msg_len = MAX_MESSAGE_LENGTH - 1;
+    }
+
+    memcpy(status.display_message, message, msg_len);
+    status.display_message[msg_len] = '\0';
+    status.update_display = 1; // Set flag to indicate a new message has been received
+}
+
 /*----------------- main --------------------------------*/
-#include "spe_main.h"
 
 // Define the global variable
 int scroll = 0;
@@ -382,8 +413,7 @@ int main()
     int x, error;
 
     // Initialize the stdio library
-
-
+    sleep_ms(2000);  // wait for Windows serial to connect
     stdio_init_all();
 
     // LED
@@ -441,19 +471,6 @@ int main()
     }
     printf(" Device Controller\n");
 
-    // Configure FPGA
- //   printf("Dissabled Program FPGA...\n");
-    config_fpga();  // Board must be set to Slave Serial mode for this to work
-  
-    x=0;
-    read_register8(FPGA_VERSION, &x);
-    if (x == FPGA_EXPECTED_VERSION) {
-        printf("FPGA Version %02x OK\n", x);
-    } else if (x == 0x00){
-        printf("FPGA Version %02x failed\n", x);
-    } else {
-        printf("FPGA Version mismatch: %02x (expected %02x)\n", x, FPGA_EXPECTED_VERSION);
-    }
 
     // setup I2C
     i2c_init(i2c1, 100 * 1000); // Use 100khz I2C clock
@@ -479,7 +496,23 @@ int main()
         printf("found\n");
         disp.active = true;
     }
-    if (disp.active) display(&disp, "EtherMUX.com");
+    set_display_message("EtherMUX.com");
+    if (disp.active) display(&disp);
+
+
+    // Configure FPGA
+ //   printf("Dissabled Program FPGA...\n");
+    config_fpga();  // Board must be set to Slave Serial mode for this to work
+  
+    x=0;
+    read_register8(FPGA_VERSION, &x);
+    if (x == FPGA_EXPECTED_VERSION) {
+        printf("FPGA Version %02x OK\n", x);
+    } else if (x == 0x00){
+        printf("FPGA Version %02x failed\n", x);
+    } else {
+        printf("FPGA Version mismatch: %02x (expected %02x)\n", x, FPGA_EXPECTED_VERSION);
+    }
 
     // Initialize QWIIC I2C port
  //   i2c_init(i2c0, 100 * 1000); // Use 100khz I2C clock
@@ -495,7 +528,15 @@ int main()
     int loop_counter = 0;
     int hop_number = 0;
     int prev_hop_number = 0;
-    uint8_t comm;
+    uint8_t link, comm;
+
+    comm_buffer_index[0] = 0;
+    comm_buffer_index[1] = 0;
+    status.link1 = 0;
+    status.link2 = 0;
+    status.update_display = 0;
+    status.link_change_pending = 0;
+
 
     // phy 2 provides clock to phy 1, so we reset it first to avoid link instability during reset
     reset_phy(2); // reset phy 2
@@ -513,32 +554,106 @@ int main()
             print_rotation_sensor();
         }
         gpio_put(LED_PIN, 1);
-        if(comm_try_receive_line(&comm_buffer[0], MAX_COMM_BUFFER_SIZE)){
-            printf("Received: %s\n", comm_buffer);
-            if (disp.active) display(&disp, comm_buffer);
+        if(comm_try_receive_line(1)){
+            printf("Received: %s\n", comm_buffer[0]);
+            set_display_message(comm_buffer[0]);
+        }
+        if(comm_try_receive_line(2)){
+            printf("Received: %s\n", comm_buffer[1]);
+            set_display_message(comm_buffer[1]);
         }
  
+        // stagger processing of different tasks to avoid latency spikes. 
+        // For example if we check the link status every loop it can cause a long delay
+        // in processing received serial data which can cause buffer overflows and lost data.
         if(loop_counter++ > 10000){ // print prompt every 10K loops to show alive status
-            hop_number = get_hop();
-            if(hop_number != prev_hop_number){
-                printf("HOP: %d\n", hop_number);
-                config_data.sd_num = hop_number;
-                if (disp.active) display(&disp, "EtherMUX.com");
-                prev_hop_number = hop_number;
+            if (disp.active && status.update_display) {
+                display(&disp);
             }
             loop_counter = 0;
+        }
+        switch (loop_counter)
+        {
+        case 1:
+            link= get_link_status(1);
+            if(link != status.link1){
+                printf("Port1 Link: %s\n", link ? "UP" : "DOWN");
+                status.link1 = link;
+                status.update_display = 1; // Set flag to update display on next loop
+                status.link_change_pending = 1; // Set flag to indicate a link change has occurred and is pending reporting
+            }
+            break;
+        case 1000:
+            link = get_link_status(2);
+            if(link != status.link2){
+                printf("Port2 Link: %s\n", link ? "UP" : "DOWN");
+                status.link2 = link;
+                status.update_display = 1; // Set flag to update display on next loop
+                status.link_change_pending = 1; // Set flag to indicate a link change has occurred and is pending reporting
+
+            }
+            break;
+        case 2000:
+            if(status.link_change_pending){
+                if(config_data.mode == CONFIG_SD ){ // if in SD mode and link goes down, enable loopback mode
+                    if(status.link2 == 1 && status.link1 == 0){ 
+                        set_loopback_mode(1); 
+                        printf("Port1 loopback: Enabled\n");
+                    } else { 
+                        set_loopback_mode(0);
+                        printf("Port1 loopback: Disabled\n");
+                    }
+                    if(status.link2 == 1) {
+                        enable_comm(1);
+                    } else {
+                        enable_comm(0);
+                    }
+
+                }else { // if in MD mode
+                    if(status.link1 == 1) {
+                        enable_comm(1);
+                    } else {
+                        enable_comm(0);
+                    }
+                    printf("Port1 Link is %s\n", status.link1 ? "UP" : "DOWN");
+                }
+
+
+                status.link_change_pending = 0; // Clear pending status after reporting
+            }
+        case 9000:
+            hop_number = get_hop();
+            if(hop_number != prev_hop_number){
+                printf("SD HOP# %d\n", hop_number);
+                config_data.sd_num = hop_number;
+                prev_hop_number = hop_number;
+                status.update_display = 1; // Set flag to update display on next loop
+            }
+            break;
         }
     }
 }
 
-int comm_try_receive_char(uint8_t *out_char) {
+int comm_try_receive_char(uint8_t *out_char, uint8_t com_port) {
     // check the fifo empty flag to make sure there is data to read
-    int x,error;
+    int x,empty_flagb;
     uint8_t spi_data = 0;
-    uint8_t tx_data[2] = {0,FPGA_CMD_READ_RX_FIFO};  // address is don't care for fifo read
+    uint8_t tx_data[2] = {com_port,FPGA_CMD_READ_RX_FIFO};  // address is com_port (1 or 2), command is read rx fifo
 
-    error = read_register8(FPGA_SPI_RD, &x);
-    if((x & 0x01) == 1){ //bit 0 is fifo empty flag
+    //Verifly a valid load in the fpaga by checking the version register before trying to read data from the FPGA.
+    read_register8(FPGA_VERSION, &x);
+    if (x != FPGA_EXPECTED_VERSION) {
+        return 0; // FPGA not responding, return error
+    }
+    read_register8(FPGA_SPI_RD, &x);
+    if(com_port == 1){ // if com_port is 1, we check bit 0 of FPGA_SPI_RD for fifo empty flag
+        empty_flagb = x & 0x01;
+    } else if(com_port == 2){ // if com_port is 2, we check bit 1 of FPGA_SPI_RD for fifo empty flag
+        empty_flagb = (x & 0x02) >> 1;
+    } else {
+        return 0; // invalid com_port
+    }
+    if(empty_flagb == 1){ //bit 0 is fifo empty flag
         //read a character from the FPGA
         // Select the SPI device by setting CS low
         gpio_put(PIN_CS, 0);
@@ -556,30 +671,44 @@ int comm_try_receive_char(uint8_t *out_char) {
     } 
 }
 
-int comm_try_receive_line(char *out_str, size_t max_length) {
-    uint8_t received_char;
+// Try to receive a line of text from the communication interface. Returns 1 if a line was received, 0 if no complete line is available.
+// Com_port =1 is outbound MD to SD direction, com_port=2 is inbound SD to MD direction.  This allows us to have separate buffers and avoid conflicts if data is received in both directions at the same time.
+int comm_try_receive_line(uint8_t com_port) {
+    uint8_t received_char, overflow;
+    
+    overflow = 0;
+    if(com_port < 1 || com_port > 2){
+        printf("Error: Invalid com_port %d\n", com_port);
+        return 0; // invalid com_port
+    }
 
-    while (comm_try_receive_char(&received_char)) {
-        if (comm_buffer_index < MAX_COMM_BUFFER_SIZE - 1) { // Leave space for null terminator
-            comm_buffer[comm_buffer_index] = received_char;
-            comm_buffer_index ++;
+    while (comm_try_receive_char(&received_char, com_port)) {
+        if (comm_buffer_index[com_port-1] < MAX_COMM_BUFFER_SIZE - 1) { // Leave space for null terminator
+            comm_buffer[com_port-1][comm_buffer_index[com_port-1]] = received_char;
+            comm_buffer_index[com_port-1] ++;
             if (received_char == '\r') { // Carriage return indicates end of line
-                comm_buffer[comm_buffer_index] = '\0'; // Null-terminate the string
-                strncpy(out_str, (char *)comm_buffer, max_length);
-                comm_buffer_index = 0; // Reset buffer index for next line
+                comm_buffer[com_port-1][comm_buffer_index[com_port-1]] = '\0'; // Null-terminate the string
+                comm_buffer_index[com_port-1] = 0; // Reset buffer index for next line
                 return 1; // Line received
             }
         } else {
-            // Buffer overflow, reset index
-            comm_buffer_index = 0;
-            return -1; // Indicate error
+            // Buffer overflow, reset index but keep draining the fifo
+            overflow = 1;
         }
+    }
+    if(overflow){
+        comm_buffer_index[com_port-1] = 0;
+        printf("Error: RX Buffer overflow on com_port %d\n", com_port);
     }
     return 0; // No complete line received yet
 }
 
 int get_hop() {
     int x,error;
-    error = read_register8(FPGA_HOP, &x);
-    return x;
+    if(config_data.mode == CONFIG_MD){
+        return 0;
+    } else{
+        error = read_register8(FPGA_HOP, &x);
+        return x;
+    }
 }

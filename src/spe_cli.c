@@ -23,8 +23,6 @@
 #define HISTORY_SIZE 10 // Maximum number of commands to store in history
 
 
-
-
 char command_history[HISTORY_SIZE][MAX_COMMAND_LENGTH]; // Command history buffer
 int history_index = 0; // Index for the next command to be stored
 int history_scroll = -1; // Index for scrolling through history (-1 means no scrolling)
@@ -79,7 +77,6 @@ void print_prompt() {
         } else {
              printf("SD?>");
         }
-        printf("SD%d>", config_data.sd_num);
     } else {
         printf("MD>");
     }
@@ -172,7 +169,7 @@ int process_command(int argc, char *argv[MAX_ARGUMENTS]) {
             }
         }else printf("Error: w [address] [data]\n");
 
-    }else if (strcmp(argv[0], "spe") == 0) {  //Send Comm data over Single Pair Ethernet
+    }else if (strcmp(argv[0], "echo") == 0) {  //Send Comm data over Single Pair Ethernet
         if(argc == 3){ // number of arguments
             device = strtol(argv[1], &endptr, 0);
             if (*endptr != '\0') {
@@ -261,15 +258,6 @@ int process_command(int argc, char *argv[MAX_ARGUMENTS]) {
             }else{
                 printf("Error: No Response\n");
             }
-        } else if (strcmp(argv[1], "send") == 0){
-            error= send_packet(device);
-            if(!error){
-                printf("TX packets enabled\n");
-            }else{
-                printf("Error: No Response\n");
-            }
-
-
         }else printf("Error: tdr or sqi\n");
 
     }else if ((strcmp(argv[0], "help") == 0) || (strcmp(argv[0], "?") == 0)) {
@@ -286,7 +274,7 @@ int process_command(int argc, char *argv[MAX_ARGUMENTS]) {
         printf(" phyx [sqi]           - Signal Quality Indicator test\n");
         printf(" phyx [gen]           - Packet Generator\n");
         printf(" phyx [send]          - Enable packet flow\n");
-        printf(" spe [device] [data]  - Send [data] to secondary [device] over SPE\n");
+        printf(" echo [device] [data]  - Send [data] to secondary [device] over SPE\n");
         printf(" config [mode]        - Set mode = MD or SD (Main or Secondary Device)\n");
         printf(" help (or ?)         - Show this help message\n");
     }else {
@@ -452,9 +440,9 @@ busy_wait_ms(1); // wait for 1ms
 
 if(device == 2){ // enable only when both phys have been configured to avoid link instability
     if (config_data.mode == 0) { // SD mode
-        error = write_register8(FPGA_PACKET_GEN, 0x01); // Enable packet stream
+        error = write_register8(FPGA_PACKET_GEN, 0x11); // Enable packet stream
     } else if (config_data.mode == 1) { // MD mode
-        error = write_register8(FPGA_PACKET_GEN, 0x81); // set to master mode and enable packet stream
+        error = write_register8(FPGA_PACKET_GEN, 0x91); // set to master mode and enable packet stream
     }
 }
 
@@ -637,6 +625,18 @@ int print_rotation_sensor(){
     }
     return 0;
 }
+/*----------------- get link status --------------------------------*/
+int get_link_status(int device) {
+    int error, reg_value, status;
+
+    error = read_smi(device, 0x01, &reg_value); // Read Basic Status Register (0x01)
+    if(reg_value & 0x0004) { // Check if link is up (bit 2)
+        status = 1; // Link is up
+    } else {
+        status = 0; // Link is down
+    }
+    return status;
+}
 
 /*----------------- get CLI input --------------------------------*/
 int get_command(char *input, int *pIndex) {  // This is a non-blocking function
@@ -809,20 +809,32 @@ int spe_send_comm(int device, uint8_t *data) {
     data[len + 1] = '\0'; // add null terminator
     len = len + 1; // update length
 
-    c_device = device;  //convert to char
+    if(device == 0){
+        c_device = MD_PORT; // FPGA defines MD as hop 254
+    }else{
+        c_device = device;  //convert to char
+    }
 
     // Shift the string one position to the right
     memmove(data + 3, data, len + 1); // +1 to include the null terminator
 
     // Insert 3 bytes of SPI header at the beginning
-    data[0] = 0x01;  // Address byte unused by fifo
+    // Determine if the command is to be sent to the outbound or inbound fifo based on the device number.
+    if(config_data.sd_num < device && device != MD_PORT){ // outbound fifo
+        data[0] = OUTBOUND_FIFO_ADDR; 
+    }else{ // inbound fifo
+        data[0] = INBOUND_FIFO_ADDR;  
+    }
     data[1] = FPGA_CMD_WRITE_TX_FIFO;  // Command byte to send to TX fifo
     data[2] = c_device;  // Secondary device number
     len = len + 3; // add header length
 
-    printf(" Device: %d Data: %s\n", device, data);
+    spi_write_array((uint8_t *)data, len);
+    if(device == BROADCAST_PORT){  // 255 is broacast so send to both outbound and inbound fifo
+        data[0] = INBOUND_FIFO_ADDR;  
+        spi_write_array((uint8_t *)data, len);
+    }
 
-    error = spi_write_array((uint8_t *)data, len);
     if (error) {
         printf("Error writing to TX FIFO\n");
         return error;
@@ -831,73 +843,32 @@ int spe_send_comm(int device, uint8_t *data) {
     return 0; // Success
 }
 
-/*----------------- Configure transmitt packet --------------------------------*/
-int send_packet(int device) { 
-
-    uint8_t data[47] = {0x00, // Address byte
-                        0x03, // Command byte Write TX DPRAM
-                        0x00,  // Packet data
-                        0x00,
-                        0x00,
-                        0x00,
-                        0x00,
-                        0x00,
-                        0x00,
-                        0x00,
-                        0x00,
-                        0x00,
-                        0x00,
-                        0x01,
-                        0x00,
-                        0x00,
-                        0x01,
-                        0x02,
-                        0x03,
-                        0x04,
-                        0x05,
-                        0x06,
-                        0x07,
-                        0x08,
-                        0x09,
-                        0x0A,
-                        0x0B,
-                        0x0C,
-                        0x0D,
-                        0x0E,
-                        0x0F,
-                        0x10,
-                        0x11,
-                        0x12,
-                        0x13,
-                        0x14,
-                        0x15,
-                        0x16,
-                        0x17,
-                        0x18,
-                        0x19,
-                        0x1A,
-                        0x1B,
-                        0x1C,
-                        0x1D,
-                        0x1E,
-                        0x1F
-
-    };  // 255 is max spi limit.
-
-    // Send the packet data
-    int error = spi_write_array((uint8_t *)data, sizeof(data));
-    if (error) {
-        printf("Error writing to TXDPRAM\n");
-        return error;
+int set_loopback_mode(int mode){
+    int error,data;
+    
+    status.port1_loopback = (mode); 
+    error = read_register8(FPGA_PACKET_GEN, &data);
+    if (mode == 0){ // turn off loopback mode
+        data = data & ~BIT_5_MASK; // clear bit 5
+        error = write_register8(FPGA_PACKET_GEN, 0x00); // Disable packet stream
+        error = write_register8(FPGA_PACKET_GEN, data); // Restore packet stream with loopback bit cleared
     }
-
-    // Enable packet transmission
-
-    error = write_register8(0x19, 0x10); // enable packets on port 2
-    if (error) {
-        printf("Error enabling packet transmission: %d\n", error);
-        return error;
+    else if (mode == 1){ // turn on loopback mode
+        data = data | BIT_5_MASK; // set bit 5
+        error = write_register8(FPGA_PACKET_GEN, 0x00); // Disable packet stream
+        error = write_register8(FPGA_PACKET_GEN, data); // Restore packet stream with loopback bit set
     }
+    return error;
+}
 
-    return 0; // Success
+void enable_comm(int enable){  // Enable RX COMM fifo
+    int error,data;
+
+    error = read_register8(FPGA_PACKET_GEN, &data);
+    if (enable) {
+        data = data | BIT_1_MASK; // set bit 1 to enable
+    } else {
+        data = data & ~BIT_1_MASK; // clear bit 1 to disable
+    }
+    error = write_register8(FPGA_PACKET_GEN, data);
 }
